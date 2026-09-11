@@ -73,6 +73,56 @@ La configuración compartida está en:
 En esta etapa no se requieren credenciales ni variables de entorno
 adicionales. No se deben guardar contraseñas, tokens ni secretos en Git.
 
+## Identidad de la API en Microsoft Entra ID
+
+Se reutiliza el tenant DigitalFix. El registro DigitalFix API admite
+cuentas de esta organización y no tiene URI de redirección, ya que
+el inicio de sesión se realizará desde el frontend.
+
+Configuración verificada en el portal el 11 de septiembre de 2026:
+
+| Dato | Valor |
+|---|---|
+| Tenant ID | `762b016c-dc33-4db0-ad42-44f32afe71f4` |
+| Nombre del registro de la API | `DigitalFix API` |
+| Client ID de la API | `85329d90-58f8-4317-a820-452599b3b04c` |
+| URI de identificador de la API | `api://85329d90-58f8-4317-a820-452599b3b04c` |
+| Scope delegado | `access_as_user` |
+| Estado del scope | Habilitado |
+| Quién puede dar consentimiento | Solo administradores |
+| Nombre del registro del frontend | `DigitalFix Frontend` |
+| Client ID del frontend | `0a57e0f7-1a4f-40f2-9011-eac64a4c49c6` |
+
+Scope completo que deberá solicitar el frontend:
+
+```text
+api://85329d90-58f8-4317-a820-452599b3b04c/access_as_user
+```
+
+En DigitalFix Frontend se agregó este permiso delegado y se concedió
+el consentimiento de administrador para DigitalFix. Permite solicitar
+acceso a la API en nombre del usuario que inició sesión. La opción
+"Solo administradores" determina quién concede el consentimiento;
+los permisos de negocio de cada usuario se definirán mediante roles.
+
+El frontend conserva además `User.Read` de Microsoft Graph, procedente
+de la actividad anterior. Ese permiso no concede acceso a DigitalFix API.
+
+Estos identificadores documentan la configuración de Entra y no son
+secretos. El URI de identificador de la API tampoco es su URL de despliegue.
+
+### Pendiente de integración
+
+- Configurar MSAL en DigitalFix Frontend para solicitar el scope de la API.
+- Validar el JWT y el scope en el BFF con Spring Security.
+- Configurar los roles Admin, Operador y Cliente y sus asignaciones.
+- Aplicar autorización por rol en los endpoints.
+- Configurar API Gateway y verificar el flujo completo con tokens.
+
+El registro y el consentimiento en Entra no implementan por sí solos
+la seguridad del BFF. Esta tarea no modifica el código Java ni demuestra
+todavía llamadas autenticadas desde DigitalFix Frontend.
+
 ## Flujo de trabajo
 
 Los cambios se realizan en una rama de trabajo y se integran a `main`

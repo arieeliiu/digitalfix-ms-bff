@@ -127,3 +127,35 @@ todavía llamadas autenticadas desde DigitalFix Frontend.
 
 Los cambios se realizan en una rama de trabajo y se integran a `main`
 mediante un Pull Request revisado y aprobado por otro integrante.
+
+## Seguridad JWT
+
+El BFF recibe access tokens mediante `Authorization: Bearer <token>`.
+
+Spring Security valida firma, emisor, audiencia y vigencia del JWT.
+Se utilizan tokens v2 de Microsoft Entra ID destinados a DigitalFix API.
+
+- `/api/perfil`: requiere el scope `access_as_user`.
+- `/api/administracion`: requiere el scope `access_as_user` y el rol `Admin`.
+- Los roles de Entra se convierten en autoridades con prefijo `ROLE_`.
+- Las solicitudes sin token o con token inválido reciben 401.
+- Los tokens válidos sin permisos suficientes reciben 403.
+
+Estos endpoints permiten comprobar la seguridad; todavía no implementan
+operaciones de negocio ni comunicación con microservicios.
+
+### Verificación
+
+Ejecutar:
+
+`.\mvnw.cmd verify`
+
+Las pruebas automatizadas comprueban firma, emisor, audiencia,
+expiración, vigencia futura, scopes y roles mediante tokens de prueba.
+
+También se verificó manualmente el acceso a ambos endpoints con un
+token real de Entra de un usuario Admin. Los casos Operador y Cliente
+se comprobaron con tokens de prueba, no con cuentas reales.
+
+API Gateway, integración con Angular y despliegue en EC2 se abordarán
+en tareas posteriores.

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -30,10 +31,16 @@ public class ConfiguracionSeguridad {
             .authorizeHttpRequests(solicitudes -> solicitudes
                 // Administración requiere tanto el scope como el rol Admin.
                 .requestMatchers("/api/administracion", "/api/administracion/**")
-                    .access(allOf(
-                        hasAuthority("SCOPE_access_as_user"),
-                        hasRole("Admin")
-                    ))
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasRole("Admin")))
+                // Supervisor: órdenes de trabajo
+                .requestMatchers("/api/ordenes/**")
+                .access(allOf(hasAuthority("SCOPE_access_as_user"), hasRole("Supervisor")))
+                // Cliente: solo sus propias órdenes
+                .requestMatchers("/api/mis-ordenes/**")
+                .access(allOf(hasAuthority("SCOPE_access_as_user"), hasRole("Cliente")))
+                // Auditor: solo lectura del timeline
+                .requestMatchers(HttpMethod.GET, "/api/timeline/**")
+                .access(allOf(hasAuthority("SCOPE_access_as_user"), hasRole("Auditor")))
                 // Las demás rutas requieren el permiso delegado de nuestra API.
                 .anyRequest().hasAuthority("SCOPE_access_as_user")
             )

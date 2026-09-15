@@ -1,0 +1,36 @@
+name: digitalfix
+services:
+  bff:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      CATALOG_URL: http://catalog:8081
+      WORKORDERS_URL: http://workorders:8082
+    networks: [backend]
+    depends_on: [catalog, workorders]
+  catalog:
+    build: ../digitalfix-ms-catalog
+    restart: unless-stopped
+    environment:
+      DB_HOST: ${DB_HOST:?Configura DB_HOST en .env}
+      DB_PORT: ${DB_PORT:-1521}
+      DB_SERVICE: ${DB_SERVICE:-ORCL}
+      DB_USERNAME: ${CATALOG_DB_USERNAME:?Configura CATALOG_DB_USERNAME}
+      DB_PASSWORD: ${CATALOG_DB_PASSWORD:?Configura CATALOG_DB_PASSWORD}
+    networks: [backend]
+  workorders:
+    build: ../digitalfix-ms-workorders
+    restart: unless-stopped
+    environment:
+      DB_HOST: ${DB_HOST:?Configura DB_HOST en .env}
+      DB_PORT: ${DB_PORT:-1521}
+      DB_SERVICE: ${DB_SERVICE:-ORCL}
+      DB_USERNAME: ${WORKORDERS_DB_USERNAME:?Configura WORKORDERS_DB_USERNAME}
+      DB_PASSWORD: ${WORKORDERS_DB_PASSWORD:?Configura WORKORDERS_DB_PASSWORD}
+    networks: [backend]
+networks:
+  # Bridge sin puertos publicados para los MS. Necesita salida a RDS y Entra.
+  backend:
+    driver: bridge

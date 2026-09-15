@@ -30,9 +30,17 @@ public class ConfiguracionSeguridad {
                 sesion.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(solicitudes -> solicitudes
-                .requestMatchers(HttpMethod.GET, "/api/catalog/services", "/api/workorders", "/api/workorders/*")
+                .requestMatchers(HttpMethod.GET, "/healthz").permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/perfil", "/api/catalog/services", "/api/workorders", "/api/workorders/*")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers(HttpMethod.POST, "/api/workorders")
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
+                .requestMatchers(HttpMethod.PUT, "/api/workorders/*/status")
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador")))
+                .requestMatchers(HttpMethod.PUT, "/api/workorders/*")
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
+                .requestMatchers(HttpMethod.DELETE, "/api/workorders/*")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers("/api/catalog/**", "/api/workorders", "/api/workorders/**").denyAll()
                 // Administración requiere tanto el scope como el rol Admin.

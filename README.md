@@ -1,5 +1,12 @@
 # digitalfix-ms-bff
 
+## Integración mínima de negocio
+
+El BFF ya expone catálogo y creación/listado/detalle de órdenes mediante JWT.
+Consultar [DEMO.md](DEMO.md) para contratos, variables Docker, rutas de Gateway,
+pruebas y límites del alcance. Las secciones de estado inicial que siguen
+documentan etapas anteriores del proyecto.
+
 BFF (Backend for Frontend) de DigitalFix. Su propósito es actuar como
 intermediario entre el frontend y los microservicios, validar los JWT
 y aplicar autorización.

@@ -15,6 +15,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import static org.springframework.security.authorization.AuthorizationManagers.allOf;
 import static org.springframework.security.authorization.AuthorityAuthorizationManager.hasAuthority;
 import static org.springframework.security.authorization.AuthorityAuthorizationManager.hasRole;
+import static org.springframework.security.authorization.AuthorityAuthorizationManager.hasAnyRole;
+import org.springframework.http.HttpMethod;
 
 @Configuration
 public class ConfiguracionSeguridad {
@@ -28,6 +30,11 @@ public class ConfiguracionSeguridad {
                 sesion.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(solicitudes -> solicitudes
+                .requestMatchers(HttpMethod.GET, "/api/catalog/services", "/api/workorders", "/api/workorders/*")
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
+                .requestMatchers(HttpMethod.POST, "/api/workorders")
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
+                .requestMatchers("/api/catalog/**", "/api/workorders", "/api/workorders/**").denyAll()
                 // Administración requiere tanto el scope como el rol Admin.
                 .requestMatchers("/api/administracion", "/api/administracion/**")
                     .access(allOf(

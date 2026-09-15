@@ -17,6 +17,13 @@ import com.nimbusds.jwt.SignedJWT;
 import com.sun.net.httpserver.HttpServer;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +40,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class SeguridadBffTests {
+
+    private static final AtomicReference<String> TOKEN_INTERNO = new AtomicReference<>();
+    private static final AtomicReference<String> CUERPO_INTERNO = new AtomicReference<>();
+    private static final AtomicReference<String> FILTRO_INTERNO = new AtomicReference<>();
+    private static final AtomicInteger CREACIONES = new AtomicInteger();
+    private static final String ORDEN = """
+        {"id":1,"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123",
+         "solicitanteId":"usuario-prueba","estado":"CREADA","fechaCreacion":"2026-09-15T00:00:00Z"}
+        """;
 
     private static final RSAKey CLAVE = generarClave();
     private static final RSAKey OTRA_CLAVE = generarClave();
@@ -51,6 +67,8 @@ class SeguridadBffTests {
     // Conservamos la configuración real de emisor, audiencia y autorización.
     @DynamicPropertySource
     static void configurarClaves(DynamicPropertyRegistry propiedades) {
+        propiedades.add("digitalfix.catalog-url", () -> "http://127.0.0.1:" + SERVIDOR.getAddress().getPort());
+        propiedades.add("digitalfix.workorders-url", () -> "http://127.0.0.1:" + SERVIDOR.getAddress().getPort());
         propiedades.add(
             "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
             () -> "http://127.0.0.1:" + SERVIDOR.getAddress().getPort() + "/claves"
@@ -75,6 +93,10 @@ class SeguridadBffTests {
         "Cliente,         /api/perfil,          200",
         "Admin,           /api/perfil,          200",
         "Admin,           /api/administracion,  200"
+        ,"sin_token,      /api/workorders,      401"
+        ,"firma_invalida, /api/catalog/services,401"
+        ,"sin_scope,      /api/workorders,      403"
+        ,"sin_rol,        /api/catalog/services,403"
     })
     void comprobarAcceso(String caso, String ruta, int codigoEsperado)
             throws Exception {
@@ -133,6 +155,66 @@ class SeguridadBffTests {
         return token.serialize();
     }
 
+    @Test
+    void flujoCatalogoCrearYConsultarConJwtFirmado() throws Exception {
+        String token = crearToken("Cliente");
+        cliente.perform(get("/api/catalog/services").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$[0].tarifa").value(25000));
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+
+        cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + token)
+            .contentType(MediaType.APPLICATION_JSON).content("""
+                {"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123","solicitanteId":"otra-persona"}
+                """))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.solicitanteId").value("usuario-prueba"));
+        assertTrue(CUERPO_INTERNO.get().contains("usuario-prueba"));
+        assertFalse(CUERPO_INTERNO.get().contains("otra-persona"));
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+
+        cliente.perform(get("/api/workorders").param("solicitanteId", "otra-persona")
+            .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].id").value(1));
+        assertEquals("solicitanteId=usuario-prueba", FILTRO_INTERNO.get());
+        cliente.perform(get("/api/workorders/1").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("CREADA"));
+    }
+
+    @Test
+    void noRevelaOrdenDeOtraPersona() throws Exception {
+        cliente.perform(get("/api/workorders/2").header("Authorization", "Bearer " + crearToken("Cliente")))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void noCreaConServicioInexistente() throws Exception {
+        int antes = CREACIONES.get();
+        cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + crearToken("Cliente"))
+            .contentType(MediaType.APPLICATION_JSON).content("""
+                {"servicioId":999,"descripcion":"Revisión","direccion":"Calle 123"}
+                """))
+            .andExpect(status().isBadRequest());
+        assertEquals(antes, CREACIONES.get());
+    }
+
+    @Test
+    void rechazaCreacionSinScopeAntesDeLlamarServicios() throws Exception {
+        int antes = CREACIONES.get();
+        cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + crearToken("sin_scope"))
+            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isForbidden());
+        assertEquals(antes, CREACIONES.get());
+    }
+
+    @Test
+    void conserva404YTraduceFalloDeServicioA502() throws Exception {
+        String token = crearToken("Cliente");
+        cliente.perform(get("/api/workorders/404").header("Authorization", "Bearer " + token))
+            .andExpect(status().isNotFound());
+        cliente.perform(get("/api/workorders/500").header("Authorization", "Bearer " + token))
+            .andExpect(status().isBadGateway());
+    }
+
     private static RSAKey generarClave() {
         try {
             return new RSAKeyGenerator(2048)
@@ -148,18 +230,45 @@ class SeguridadBffTests {
             var servidor = HttpServer.create(
                 new InetSocketAddress("127.0.0.1", 0), 0
             );
-            byte[] respuesta = new JWKSet(CLAVE.toPublicJWK())
+            byte[] clavesPublicas = new JWKSet(CLAVE.toPublicJWK())
                 .toString().getBytes(StandardCharsets.UTF_8);
 
             servidor.createContext("/claves", intercambio -> {
                 intercambio.getResponseHeaders()
                     .set("Content-Type", "application/json");
-                intercambio.sendResponseHeaders(200, respuesta.length);
+                intercambio.sendResponseHeaders(200, clavesPublicas.length);
                 try (var salida = intercambio.getResponseBody()) {
-                    salida.write(respuesta);
+                    salida.write(clavesPublicas);
                 }
             });
             servidor.start();
+            servidor.createContext("/api", intercambio -> {
+                TOKEN_INTERNO.set(intercambio.getRequestHeaders().getFirst("Authorization"));
+                String ruta = intercambio.getRequestURI().getPath();
+                String respuesta;
+                int status = 200;
+                if (ruta.equals("/api/catalog/services")) {
+                    respuesta = "[{\"id\":1,\"nombre\":\"Mantención\",\"descripcion\":\"Revisión\",\"tarifa\":25000}]";
+                } else if (intercambio.getRequestMethod().equals("POST")) {
+                    CREACIONES.incrementAndGet();
+                    CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                    respuesta = ORDEN; status = 201;
+                } else if (ruta.equals("/api/workorders")) {
+                    FILTRO_INTERNO.set(intercambio.getRequestURI().getQuery());
+                    // Incluye una ajena para verificar que el BFF tampoco la expone con un MS antiguo.
+                    respuesta = "[" + ORDEN + "," + ORDEN.replace("usuario-prueba", "otra-persona") + "]";
+                } else if (ruta.endsWith("/2")) {
+                    respuesta = ORDEN.replace("usuario-prueba", "otra-persona");
+                } else if (ruta.endsWith("/404")) {
+                    respuesta = "{}"; status = 404;
+                } else if (ruta.endsWith("/500")) {
+                    respuesta = "{}"; status = 500;
+                } else { respuesta = ORDEN; }
+                byte[] bytes = respuesta.getBytes(StandardCharsets.UTF_8);
+                intercambio.getResponseHeaders().set("Content-Type", "application/json");
+                intercambio.sendResponseHeaders(status, bytes.length);
+                try (var salida = intercambio.getResponseBody()) { salida.write(bytes); }
+            });
             return servidor;
         } catch (Exception error) {
             throw new IllegalStateException(

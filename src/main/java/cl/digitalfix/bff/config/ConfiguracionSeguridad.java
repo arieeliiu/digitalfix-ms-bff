@@ -30,7 +30,9 @@ public class ConfiguracionSeguridad {
                 sesion.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(solicitudes -> solicitudes
-                .requestMatchers(HttpMethod.GET, "/api/catalog/services", "/api/workorders", "/api/workorders/*")
+                .requestMatchers(HttpMethod.GET, "/healthz").permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/perfil", "/api/catalog/services", "/api/workorders", "/api/workorders/*")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers(HttpMethod.POST, "/api/workorders")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))

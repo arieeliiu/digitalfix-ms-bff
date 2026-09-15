@@ -97,6 +97,8 @@ class SeguridadBffTests {
         ,"firma_invalida, /api/catalog/services,401"
         ,"sin_scope,      /api/workorders,      403"
         ,"sin_rol,        /api/catalog/services,403"
+        ,"sin_rol,        /api/perfil,          403"
+        ,"sin_oid,        /api/workorders,      403"
     })
     void comprobarAcceso(String caso, String ruta, int codigoEsperado)
             throws Exception {
@@ -117,7 +119,8 @@ class SeguridadBffTests {
         Instant ahora = Instant.now();
 
         var claims = new JWTClaimsSet.Builder()
-            .subject("usuario-prueba")
+            .subject("subject-distinto")
+            .claim("oid", caso.equals("sin_oid") ? null : "usuario-prueba")
             .issuer(caso.equals("emisor_invalido")
                 ? "https://emisor-incorrecto.example" : emisor)
             .audience(caso.equals("audiencia_invalida")
@@ -153,6 +156,13 @@ class SeguridadBffTests {
             caso.equals("firma_invalida") ? OTRA_CLAVE : CLAVE
         ));
         return token.serialize();
+    }
+
+    @Test
+    void saludYOpcionesNoExigenToken() throws Exception {
+        cliente.perform(get("/healthz")).andExpect(status().isOk());
+        cliente.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options("/api/workorders"))
+            .andExpect(status().isOk());
     }
 
     @Test

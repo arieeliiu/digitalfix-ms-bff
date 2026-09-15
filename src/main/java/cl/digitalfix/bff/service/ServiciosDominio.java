@@ -83,8 +83,8 @@ public class ServiciosDominio {
     }
 
     private String identidad(Jwt jwt) {
-        // sub es estable para el usuario dentro de DigitalFix API; no usamos nombre/email.
-        String subject = jwt.getSubject();
+        // oid identifica al usuario en el tenant validado. Sin fallback a sub: evita dos identidades por usuario.
+        String subject = jwt.getClaimAsString("oid");
         if (subject == null || subject.isBlank() || subject.length() > 100) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El token no identifica un solicitante válido");
         }

@@ -34,4 +34,22 @@ public class ControladorNegocio {
     public Orden crear(@RequestBody NuevaOrden solicitud, @AuthenticationPrincipal Jwt jwt) {
         return servicios.crearOrden(solicitud, jwt);
     }
+
+    @PutMapping("/workorders/{id}")
+    public Orden actualizar(@PathVariable Long id, @RequestBody NuevaOrden solicitud,
+            @AuthenticationPrincipal Jwt jwt) {
+        return servicios.actualizarOrden(id, solicitud, jwt);
+    }
+
+    @PutMapping("/workorders/{id}/status")
+    public Orden cambiarEstado(@PathVariable Long id, @RequestBody CambioEstado solicitud,
+            @AuthenticationPrincipal Jwt jwt) {
+        return servicios.cambiarEstado(id, solicitud, jwt);
+    }
+
+    @DeleteMapping("/workorders/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void eliminar(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        servicios.eliminarOrden(id, jwt);
+    }
 }

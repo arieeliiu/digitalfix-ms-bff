@@ -1,4 +1,4 @@
-"""Configura las cinco rutas existentes/nuevas sin borrar rutas del usuario.
+"""Configura las rutas de DigitalFix y el CRUD de órdenes sin borrar rutas del usuario.
 Usa AWS CLI v2 y credenciales temporales de Student Lab en el entorno.
 """
 import argparse
@@ -9,7 +9,9 @@ API = "9ijsvq2s6j"
 ISSUER = "https://login.microsoftonline.com/762b016c-dc33-4db0-ad42-44f32afe71f4/v2.0"
 AUDIENCE = "85329d90-58f8-4317-a820-452599b3b04c"
 ROUTES = ["GET /api/perfil", "GET /api/catalog/services", "GET /api/workorders",
-          "POST /api/workorders", "GET /api/workorders/{id}"]
+          "POST /api/workorders", "GET /api/workorders/{id}",
+          "PUT /api/workorders/{id}", "PUT /api/workorders/{id}/status",
+          "DELETE /api/workorders/{id}"]
 
 
 def aws(operation, **arguments):
@@ -71,7 +73,7 @@ def main():
         else:
             aws("create-route", **values)
     aws("update-api", api_id=API, cors_configuration={"AllowOrigins": ["http://localhost"],
-        "AllowMethods": ["GET", "POST", "OPTIONS"], "AllowHeaders": ["Authorization", "Content-Type"],
+        "AllowMethods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "AllowHeaders": ["Authorization", "Content-Type"],
         "AllowCredentials": False, "MaxAge": 300})
     stages = aws("get-stages", api_id=API).get("Items", [])
     if any(s["StageName"] == "$default" for s in stages):

@@ -19,8 +19,10 @@ import org.springframework.web.server.ResponseStatusException;
 public class ServiciosDominio {
     public record ServicioCatalogo(Long id, String nombre, String descripcion, BigDecimal tarifa) {}
     public record NuevaOrden(Long servicioId, String descripcion, String direccion) {}
+    public record CambioEstado(String status, String tecnicoId) {}
     public record Orden(Long id, Long servicioId, String descripcion, String direccion,
-                        String solicitanteId, Instant fechaCreacion, String estado) {}
+                        String solicitanteId, Instant fechaCreacion, String estado,
+                        String tecnicoId, String actualizadoPor, Instant fechaActualizacion) {}
     private record OrdenInterna(Long servicioId, String descripcion, String direccion, String solicitanteId) {}
 
     private final RestClient catalog;
@@ -66,6 +68,50 @@ public class ServiciosDominio {
 
     public Orden crearOrden(NuevaOrden solicitud, Jwt jwt) {
         String solicitante = identidad(jwt);
+        validarSolicitud(solicitud, jwt);
+        var interna = new OrdenInterna(solicitud.servicioId(), solicitud.descripcion().trim(),
+            solicitud.direccion().trim(), solicitante);
+        var orden = workorders.post().uri("/api/workorders")
+            .headers(h -> h.setBearerAuth(jwt.getTokenValue())).body(interna).retrieve().body(Orden.class);
+        if (orden == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Orden sin respuesta");
+        return orden;
+    }
+
+    public Orden actualizarOrden(Long id, NuevaOrden solicitud, Jwt jwt) {
+        consultarOrden(id, jwt);
+        validarSolicitud(solicitud, jwt);
+        var orden = workorders.put()
+            .uri(uri -> uri.path("/api/workorders/{id}").queryParam("solicitanteId", identidad(jwt)).build(id))
+            .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+            .body(new NuevaOrden(solicitud.servicioId(), solicitud.descripcion().trim(), solicitud.direccion().trim()))
+            .retrieve().body(Orden.class);
+        if (orden == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Orden sin respuesta");
+        return orden;
+    }
+
+    public Orden cambiarEstado(Long id, CambioEstado solicitud, Jwt jwt) {
+        consultarOrden(id, jwt);
+        if (solicitud.status() == null || !List.of("CREADA", "ASIGNADA", "EN_DESPLAZAMIENTO",
+                "EN_EJECUCION", "CERRADA", "CANCELADA").contains(solicitud.status())
+                || (solicitud.tecnicoId() != null && solicitud.tecnicoId().length() > 100)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Estado o técnico inválido");
+        }
+        var orden = workorders.put()
+            .uri(uri -> uri.path("/api/workorders/{id}/status").queryParam("solicitanteId", identidad(jwt)).build(id))
+            .headers(h -> h.setBearerAuth(jwt.getTokenValue())).body(solicitud)
+            .retrieve().body(Orden.class);
+        if (orden == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Orden sin respuesta");
+        return orden;
+    }
+
+    public void eliminarOrden(Long id, Jwt jwt) {
+        consultarOrden(id, jwt);
+        workorders.delete()
+            .uri(uri -> uri.path("/api/workorders/{id}").queryParam("solicitanteId", identidad(jwt)).build(id))
+            .headers(h -> h.setBearerAuth(jwt.getTokenValue())).retrieve().toBodilessEntity();
+    }
+
+    private void validarSolicitud(NuevaOrden solicitud, Jwt jwt) {
         if (solicitud.servicioId() == null || solicitud.servicioId() <= 0
             || solicitud.descripcion() == null || solicitud.descripcion().isBlank() || solicitud.descripcion().length() > 1000
             || solicitud.direccion() == null || solicitud.direccion().isBlank() || solicitud.direccion().length() > 300) {
@@ -74,12 +120,6 @@ public class ServiciosDominio {
         if (listarServicios(jwt).stream().noneMatch(s -> solicitud.servicioId().equals(s.id()))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El servicio seleccionado no existe");
         }
-        var interna = new OrdenInterna(solicitud.servicioId(), solicitud.descripcion().trim(),
-            solicitud.direccion().trim(), solicitante);
-        var orden = workorders.post().uri("/api/workorders")
-            .headers(h -> h.setBearerAuth(jwt.getTokenValue())).body(interna).retrieve().body(Orden.class);
-        if (orden == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Orden sin respuesta");
-        return orden;
     }
 
     private String identidad(Jwt jwt) {

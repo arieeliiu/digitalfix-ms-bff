@@ -15,10 +15,4 @@ public class ControladorAcceso {
     public Map<String, String> consultarPerfil() {
         return Map.of("mensaje", "Acceso autenticado a DigitalFix.");
     }
-
-    // Requiere además el rol Admin, según ConfiguracionSeguridad.
-    @GetMapping("/administracion")
-    public Map<String, String> consultarAdministracion() {
-        return Map.of("mensaje", "Acceso de administrador a DigitalFix.");
-    }
 }

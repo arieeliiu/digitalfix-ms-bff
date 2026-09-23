@@ -23,8 +23,7 @@ verificada por un administrador; no se reasignan ni se borran automáticamente.
 
 Los roles técnicos exactos son `Admin`, `Operador`, `Cliente`. Los tres consultan
 el catálogo y crean/listan/consultan **solo sus propias órdenes** en este alcance.
-No se introduce acceso global a órdenes para Admin/Operador. El endpoint auxiliar
-`/api/administracion` sigue siendo Admin, pero no se publica en Gateway.
+No se introduce acceso global a órdenes para Admin/Operador.
 
 ## 1. Entra ID (portal)
 
@@ -308,7 +307,8 @@ foreach ($repo in 'digitalfix-ms-bff','digitalfix-ms-catalog','digitalfix-ms-wor
 
 Pruebas de dominio usan H2 y no necesitan Oracle/DB_* reales. Las pruebas del BFF
 firman JWT con claves locales y llaman por HTTP a dobles de Catalog/Workorders.
-Ver [VERIFICATION.md](VERIFICATION.md) para resultados de esta revisión y pendientes.
+Ver [VERIFICATION.md](VERIFICATION.md) como registro histórico
+del 15 de septiembre de 2026, no como listado de pendientes actuales.
 No se afirma que una compilación local certifique políticas remotas ni permisos del Lab.
 
 ## Referencias oficiales

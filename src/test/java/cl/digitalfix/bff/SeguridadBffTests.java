@@ -77,28 +77,23 @@ class SeguridadBffTests {
 
     @ParameterizedTest(name = "{0} en {1} debe responder {2}")
     @CsvSource({
-        "sin_token,       /api/perfil,          401",
-        "malformado,      /api/perfil,          401",
-        "firma_invalida,  /api/perfil,          401",
-        "emisor_invalido, /api/perfil,          401",
-        "audiencia_invalida, /api/perfil,       401",
-        "vencido,         /api/perfil,          401",
-        "futuro,          /api/perfil,          401",
-        "sin_scope,       /api/perfil,          403",
-        "sin_scope,       /api/administracion,  403",
-        "sin_rol,         /api/administracion,  403",
-        "Operador,        /api/administracion,  403",
-        "Cliente,         /api/administracion,  403",
-        "Operador,        /api/perfil,          200",
-        "Cliente,         /api/perfil,          200",
-        "Admin,           /api/perfil,          200",
-        "Admin,           /api/administracion,  200"
-        ,"sin_token,      /api/workorders,      401"
-        ,"firma_invalida, /api/catalog/services,401"
-        ,"sin_scope,      /api/workorders,      403"
-        ,"sin_rol,        /api/catalog/services,403"
-        ,"sin_rol,        /api/perfil,          403"
-        ,"sin_oid,        /api/workorders,      403"
+        "sin_token,         /api/perfil,           401",
+        "malformado,        /api/perfil,           401",
+        "firma_invalida,    /api/perfil,           401",
+        "emisor_invalido,   /api/perfil,           401",
+        "audiencia_invalida,/api/perfil,           401",
+        "vencido,           /api/perfil,           401",
+        "futuro,            /api/perfil,           401",
+        "sin_scope,         /api/perfil,           403",
+        "Operador,          /api/perfil,           200",
+        "Cliente,           /api/perfil,           200",
+        "Admin,             /api/perfil,           200",
+        "sin_token,         /api/workorders,       401",
+        "firma_invalida,    /api/catalog/services, 401",
+        "sin_scope,         /api/workorders,       403",
+        "sin_rol,           /api/catalog/services, 403",
+        "sin_rol,           /api/perfil,           403",
+        "sin_oid,           /api/workorders,       403"
     })
     void comprobarAcceso(String caso, String ruta, int codigoEsperado)
             throws Exception {

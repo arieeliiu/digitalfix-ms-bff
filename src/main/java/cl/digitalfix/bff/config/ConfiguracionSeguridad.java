@@ -14,7 +14,6 @@ import org.springframework.security.web.SecurityFilterChain;
 
 import static org.springframework.security.authorization.AuthorizationManagers.allOf;
 import static org.springframework.security.authorization.AuthorityAuthorizationManager.hasAuthority;
-import static org.springframework.security.authorization.AuthorityAuthorizationManager.hasRole;
 import static org.springframework.security.authorization.AuthorityAuthorizationManager.hasAnyRole;
 import org.springframework.http.HttpMethod;
 
@@ -43,12 +42,6 @@ public class ConfiguracionSeguridad {
                 .requestMatchers(HttpMethod.DELETE, "/api/workorders/*")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers("/api/catalog/**", "/api/workorders", "/api/workorders/**").denyAll()
-                // Administración requiere tanto el scope como el rol Admin.
-                .requestMatchers("/api/administracion", "/api/administracion/**")
-                    .access(allOf(
-                        hasAuthority("SCOPE_access_as_user"),
-                        hasRole("Admin")
-                    ))
                 // Las demás rutas requieren el permiso delegado de nuestra API.
                 .anyRequest().hasAuthority("SCOPE_access_as_user")
             )

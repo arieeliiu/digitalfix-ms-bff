@@ -17,12 +17,43 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ServiciosDominio {
-    public record ServicioCatalogo(Long id, String nombre, String descripcion, BigDecimal tarifa) {}
-    public record NuevaOrden(Long servicioId, String descripcion, String direccion) {}
-    public record CambioEstado(String status, String tecnicoId) {}
-    public record Orden(Long id, Long servicioId, String descripcion, String direccion,
-                        String solicitanteId, Instant fechaCreacion, String estado,
-                        String tecnicoId, String actualizadoPor, Instant fechaActualizacion) {}
+    public record ServicioCatalogo(
+        Long id,
+        String nombre,
+        String descripcion,
+        BigDecimal tarifa
+    ) {}
+
+    public record NuevaOrden(
+            Long servicioId,
+            String descripcion,
+            String direccion
+    ) {}
+
+    public record RepuestoOrden(
+            Long repuestoId,
+            Integer cantidad
+    ) {}
+
+    public record CambioEstado(
+            String status,
+            String tecnicoId,
+            List<RepuestoOrden> repuestos
+    ) {}
+
+    public record Orden(
+            Long id,
+            Long servicioId,
+            String descripcion,
+            String direccion,
+            String solicitanteId,
+            Instant fechaCreacion,
+            String estado,
+            String tecnicoId,
+            String actualizadoPor,
+            Instant fechaActualizacion,
+            List<RepuestoOrden> repuestos
+    ) {}
     private record OrdenInterna(Long servicioId, String descripcion, String direccion, String solicitanteId) {}
 
     private final RestClient catalog;
@@ -91,16 +122,62 @@ public class ServiciosDominio {
 
     public Orden cambiarEstado(Long id, CambioEstado solicitud, Jwt jwt) {
         consultarOrden(id, jwt);
-        if (solicitud.status() == null || !List.of("CREADA", "ASIGNADA", "EN_DESPLAZAMIENTO",
-                "EN_EJECUCION", "CERRADA", "CANCELADA").contains(solicitud.status())
-                || (solicitud.tecnicoId() != null && solicitud.tecnicoId().length() > 100)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Estado o técnico inválido");
+
+        boolean estadoInvalido =
+                solicitud.status() == null
+                || !List.of(
+                        "CREADA",
+                        "ASIGNADA",
+                        "EN_DESPLAZAMIENTO",
+                        "EN_EJECUCION",
+                        "CERRADA",
+                        "CANCELADA")
+                    .contains(solicitud.status());
+
+        boolean tecnicoInvalido =
+                solicitud.tecnicoId() != null
+                && solicitud.tecnicoId().length() > 100;
+
+        boolean repuestosInvalidos =
+                solicitud.repuestos() != null
+                && solicitud.repuestos().stream().anyMatch(repuesto ->
+                        repuesto == null
+                        || repuesto.repuestoId() == null
+                        || repuesto.repuestoId() <= 0
+                        || repuesto.cantidad() == null
+                        || repuesto.cantidad() <= 0);
+
+        boolean repuestosFueraDeAsignacion =
+                !"ASIGNADA".equals(solicitud.status())
+                && solicitud.repuestos() != null
+                && !solicitud.repuestos().isEmpty();
+
+        if (estadoInvalido
+                || tecnicoInvalido
+                || repuestosInvalidos
+                || repuestosFueraDeAsignacion) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Estado, técnico o repuestos inválidos");
         }
+
         var orden = workorders.put()
-            .uri(uri -> uri.path("/api/workorders/{id}/status").queryParam("solicitanteId", identidad(jwt)).build(id))
-            .headers(h -> h.setBearerAuth(jwt.getTokenValue())).body(solicitud)
-            .retrieve().body(Orden.class);
-        if (orden == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Orden sin respuesta");
+                .uri(uri -> uri
+                        .path("/api/workorders/{id}/status")
+                        .queryParam("solicitanteId", identidad(jwt))
+                        .build(id))
+                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                .body(solicitud)
+                .retrieve()
+                .body(Orden.class);
+
+        if (orden == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Orden sin respuesta");
+        }
+
         return orden;
     }
 

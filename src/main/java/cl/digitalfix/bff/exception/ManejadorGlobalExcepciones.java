@@ -1,4 +1,4 @@
-package cl.digitalfix.bff.controller;
+package cl.digitalfix.bff.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -10,7 +10,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
-public class ErroresDominio {
+public class ManejadorGlobalExcepciones {
     @ExceptionHandler(ResponseStatusException.class)
     ProblemDetail negocio(ResponseStatusException error) {
         return ProblemDetail.forStatusAndDetail(error.getStatusCode(), error.getReason() == null ? "Solicitud rechazada" : error.getReason());

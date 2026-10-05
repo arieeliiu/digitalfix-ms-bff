@@ -1,120 +1,34 @@
 package cl.digitalfix.bff.service;
 
-import java.math.BigDecimal;
-import java.net.http.HttpClient;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
+import cl.digitalfix.bff.client.ClienteOrdenes;
+import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.CrearOrdenDominioRequest;
+import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
+import cl.digitalfix.bff.dto.response.OrdenResponse;
 
 @Service
-public class ServiciosDominio {
+public class ServicioOrdenes {
 
-    public record ServicioCatalogo(
-            Long id,
-            String nombre,
-            String descripcion,
-            BigDecimal tarifa
-    ) {}
+    private final ClienteOrdenes ordenes;
+    private final ServicioCatalogo catalogo;
 
-    public record NuevaOrden(
-            Long servicioId,
-            String descripcion,
-            String direccion
-    ) {}
-
-    public record RepuestoOrden(
-            Long repuestoId,
-            Integer cantidad
-    ) {}
-
-    public record CambioEstado(
-            String status,
-            String tecnicoId,
-            List<RepuestoOrden> repuestos
-    ) {}
-
-    public record Orden(
-            Long id,
-            Long servicioId,
-            String descripcion,
-            String direccion,
-            String solicitanteId,
-            Instant fechaCreacion,
-            String estado,
-            String tecnicoId,
-            String actualizadoPor,
-            Instant fechaActualizacion,
-            List<RepuestoOrden> repuestos
-    ) {}
-
-    private record OrdenInterna(
-            Long servicioId,
-            String descripcion,
-            String direccion,
-            String solicitanteId
-    ) {}
-
-    private final RestClient catalog;
-    private final RestClient workorders;
-
-    public ServiciosDominio(
-            @Value("${digitalfix.catalog-url}") String catalogUrl,
-            @Value("${digitalfix.workorders-url}") String workordersUrl) {
-
-        var factory = new JdkClientHttpRequestFactory(
-                HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofSeconds(3))
-                        .build());
-
-        factory.setReadTimeout(Duration.ofSeconds(10));
-
-        catalog = RestClient.builder()
-                .baseUrl(catalogUrl)
-                .requestFactory(factory)
-                .build();
-
-        workorders = RestClient.builder()
-                .baseUrl(workordersUrl)
-                .requestFactory(factory)
-                .build();
+    public ServicioOrdenes(ClienteOrdenes ordenes, ServicioCatalogo catalogo) {
+        this.ordenes = ordenes;
+        this.catalogo = catalogo;
     }
 
-    public List<ServicioCatalogo> listarServicios(Jwt jwt) {
-        var resultado = catalog.get()
-                .uri("/api/catalog/services")
-                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .retrieve()
-                .body(new ParameterizedTypeReference<List<ServicioCatalogo>>() {});
-
-        if (resultado == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "Catálogo sin respuesta");
-        }
-
-        return resultado;
-    }
-
-    public List<Orden> listarOrdenes(Jwt jwt) {
+    public List<OrdenResponse> listarOrdenes(Jwt jwt) {
 
         String actor = identidad(jwt);
 
         if (puedeGestionarOrdenes(jwt)) {
 
-            var resultado = workorders.get()
-                    .uri("/api/workorders")
-                    .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<List<Orden>>() {});
+            var resultado = ordenes.listar(null, jwt);
 
             if (resultado == null) {
                 throw new ResponseStatusException(
@@ -125,14 +39,7 @@ public class ServiciosDominio {
             return resultado;
         }
 
-        var resultado = workorders.get()
-                .uri(uri -> uri
-                        .path("/api/workorders")
-                        .queryParam("solicitanteId", actor)
-                        .build())
-                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .retrieve()
-                .body(new ParameterizedTypeReference<List<Orden>>() {});
+        var resultado = ordenes.listar(actor, jwt);
 
         if (resultado == null) {
             throw new ResponseStatusException(
@@ -145,13 +52,9 @@ public class ServiciosDominio {
                 .toList();
     }
 
-    public Orden consultarOrden(Long id, Jwt jwt) {
+    public OrdenResponse consultarOrden(Long id, Jwt jwt) {
 
-        var orden = workorders.get()
-                .uri("/api/workorders/{id}", id)
-                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .retrieve()
-                .body(Orden.class);
+        var orden = ordenes.consultar(id, jwt);
 
         if (orden == null) {
             throw new ResponseStatusException(
@@ -170,24 +73,19 @@ public class ServiciosDominio {
         return orden;
     }
 
-    public Orden crearOrden(NuevaOrden solicitud, Jwt jwt) {
+    public OrdenResponse crearOrden(NuevaOrdenRequest solicitud, Jwt jwt) {
 
         String solicitante = identidad(jwt);
 
         validarSolicitud(solicitud, jwt);
 
-        var interna = new OrdenInterna(
+        var interna = new CrearOrdenDominioRequest(
                 solicitud.servicioId(),
                 solicitud.descripcion().trim(),
                 solicitud.direccion().trim(),
                 solicitante);
 
-        var orden = workorders.post()
-                .uri("/api/workorders")
-                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .body(interna)
-                .retrieve()
-                .body(Orden.class);
+        var orden = ordenes.crear(interna, jwt);
 
         if (orden == null) {
             throw new ResponseStatusException(
@@ -198,26 +96,18 @@ public class ServiciosDominio {
         return orden;
     }
 
-    public Orden actualizarOrden(
+    public OrdenResponse actualizarOrden(
             Long id,
-            NuevaOrden solicitud,
+            NuevaOrdenRequest solicitud,
             Jwt jwt) {
 
         consultarOrden(id, jwt);
         validarSolicitud(solicitud, jwt);
 
-        var orden = workorders.put()
-                .uri(uri -> uri
-                        .path("/api/workorders/{id}")
-                        .queryParam("solicitanteId", identidad(jwt))
-                        .build(id))
-                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .body(new NuevaOrden(
+        var orden = ordenes.actualizar(id, identidad(jwt), new NuevaOrdenRequest(
                         solicitud.servicioId(),
                         solicitud.descripcion().trim(),
-                        solicitud.direccion().trim()))
-                .retrieve()
-                .body(Orden.class);
+                        solicitud.direccion().trim()), jwt);
 
         if (orden == null) {
             throw new ResponseStatusException(
@@ -228,9 +118,9 @@ public class ServiciosDominio {
         return orden;
     }
 
-    public Orden cambiarEstado(
+    public OrdenResponse cambiarEstado(
             Long id,
-            CambioEstado solicitud,
+            CambioEstadoRequest solicitud,
             Jwt jwt) {
 
         consultarOrden(id, jwt);
@@ -274,15 +164,7 @@ public class ServiciosDominio {
                     "Estado, técnico o repuestos inválidos");
         }
 
-        var orden = workorders.put()
-                .uri(uri -> uri
-                        .path("/api/workorders/{id}/status")
-                        .queryParam("solicitanteId", identidad(jwt))
-                        .build(id))
-                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .body(solicitud)
-                .retrieve()
-                .body(Orden.class);
+        var orden = ordenes.cambiarEstado(id, identidad(jwt), solicitud, jwt);
 
         if (orden == null) {
             throw new ResponseStatusException(
@@ -297,18 +179,11 @@ public class ServiciosDominio {
 
         consultarOrden(id, jwt);
 
-        workorders.delete()
-                .uri(uri -> uri
-                        .path("/api/workorders/{id}")
-                        .queryParam("solicitanteId", identidad(jwt))
-                        .build(id))
-                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .retrieve()
-                .toBodilessEntity();
+        ordenes.eliminar(id, identidad(jwt), jwt);
     }
 
     private void validarSolicitud(
-            NuevaOrden solicitud,
+            NuevaOrdenRequest solicitud,
             Jwt jwt) {
 
         if (solicitud.servicioId() == null
@@ -325,7 +200,7 @@ public class ServiciosDominio {
                     "Servicio, descripción y dirección válidos son obligatorios");
         }
 
-        if (listarServicios(jwt).stream()
+        if (catalogo.listarServicios(jwt).stream()
                 .noneMatch(s -> solicitud.servicioId().equals(s.id()))) {
 
             throw new ResponseStatusException(

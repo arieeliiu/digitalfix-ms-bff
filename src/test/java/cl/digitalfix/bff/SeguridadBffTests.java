@@ -23,6 +23,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -44,6 +46,7 @@ class SeguridadBffTests {
     private static final AtomicReference<String> TOKEN_INTERNO = new AtomicReference<>();
     private static final AtomicReference<String> CUERPO_INTERNO = new AtomicReference<>();
     private static final AtomicReference<String> FILTRO_INTERNO = new AtomicReference<>();
+    private static final AtomicReference<String> METODO_INTERNO = new AtomicReference<>();
     private static final AtomicInteger CREACIONES = new AtomicInteger();
     private static final String ORDEN = """
         {"id":1,"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123",
@@ -220,6 +223,60 @@ class SeguridadBffTests {
             .andExpect(status().isBadGateway());
     }
 
+    @Test
+    void actualizarYEliminarConservanContratoYBearer() throws Exception {
+        String token = crearToken("Cliente");
+        cliente.perform(put("/api/workorders/1").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                    {"servicioId":1,"descripcion":" Revisión ","direccion":" Calle 123 "}
+                    """))
+                .andExpect(status().isOk());
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+        assertEquals("solicitanteId=usuario-prueba", FILTRO_INTERNO.get());
+        assertTrue(CUERPO_INTERNO.get().contains("\"descripcion\":\"Revisión\""));
+        assertTrue(CUERPO_INTERNO.get().contains("\"direccion\":\"Calle 123\""));
+
+        cliente.perform(delete("/api/workorders/1").header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+        assertEquals("DELETE", METODO_INTERNO.get());
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+        assertEquals("solicitanteId=usuario-prueba", FILTRO_INTERNO.get());
+    }
+
+    @Test
+    void cambioEstadoMantieneRolesPayloadYBearer() throws Exception {
+        String cuerpo = """
+            {"status":"ASIGNADA","tecnicoId":"tecnico-1","repuestos":[{"repuestoId":4,"cantidad":2}]}
+            """;
+        cliente.perform(put("/api/workorders/1/status")
+                .header("Authorization", "Bearer " + crearToken("Cliente"))
+                .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isForbidden());
+
+        String token = crearToken("Operador");
+        cliente.perform(put("/api/workorders/1/status").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isOk());
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+        assertEquals("solicitanteId=usuario-prueba", FILTRO_INTERNO.get());
+        assertTrue(CUERPO_INTERNO.get().contains("\"status\":\"ASIGNADA\""));
+        assertTrue(CUERPO_INTERNO.get().contains("\"repuestoId\":4"));
+        assertTrue(CUERPO_INTERNO.get().contains("\"cantidad\":2"));
+    }
+
+    @Test
+    void conservarDetalleDeValidacionYOrdenDeComprobaciones() throws Exception {
+        String token = crearToken("Cliente");
+        cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Servicio, descripción y dirección válidos son obligatorios"));
+        cliente.perform(put("/api/workorders/2").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail").value("Orden no encontrada"));
+    }
+
     private static RSAKey generarClave() {
         try {
             return new RSAKeyGenerator(2048)
@@ -249,6 +306,7 @@ class SeguridadBffTests {
             servidor.start();
             servidor.createContext("/api", intercambio -> {
                 TOKEN_INTERNO.set(intercambio.getRequestHeaders().getFirst("Authorization"));
+                METODO_INTERNO.set(intercambio.getRequestMethod());
                 String ruta = intercambio.getRequestURI().getPath();
                 String respuesta;
                 int status = 200;
@@ -258,6 +316,15 @@ class SeguridadBffTests {
                     CREACIONES.incrementAndGet();
                     CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                     respuesta = ORDEN; status = 201;
+                } else if (intercambio.getRequestMethod().equals("PUT")) {
+                    FILTRO_INTERNO.set(intercambio.getRequestURI().getQuery());
+                    CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                    respuesta = ORDEN;
+                } else if (intercambio.getRequestMethod().equals("DELETE")) {
+                    FILTRO_INTERNO.set(intercambio.getRequestURI().getQuery());
+                    intercambio.sendResponseHeaders(204, -1);
+                    intercambio.close();
+                    return;
                 } else if (ruta.equals("/api/workorders")) {
                     FILTRO_INTERNO.set(intercambio.getRequestURI().getQuery());
                     // Incluye una ajena para verificar que el BFF tampoco la expone con un MS antiguo.

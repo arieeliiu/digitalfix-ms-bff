@@ -19,6 +19,13 @@ public class ControladorNegocio {
         return servicios.listarServicios(jwt);
     }
 
+    @GetMapping("/catalog/spare-parts")
+    public List<RepuestoCatalogo> repuestos(
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return servicios.listarRepuestos(jwt);
+    }
+
     @GetMapping("/workorders")
     public List<Orden> ordenes(@AuthenticationPrincipal Jwt jwt) {
         return servicios.listarOrdenes(jwt);

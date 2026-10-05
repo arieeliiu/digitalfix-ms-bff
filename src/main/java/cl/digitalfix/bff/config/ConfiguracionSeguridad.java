@@ -33,6 +33,10 @@ public class ConfiguracionSeguridad {
                 .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/perfil", "/api/catalog/services", "/api/workorders", "/api/workorders/*")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
+                .requestMatchers(HttpMethod.GET, "/api/catalog/spare-parts")
+                    .access(allOf(
+                        hasAuthority("SCOPE_access_as_user"),
+                        hasAnyRole("Admin", "Operador")))
                 .requestMatchers(HttpMethod.POST, "/api/workorders")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers(HttpMethod.PUT, "/api/workorders/*/status")

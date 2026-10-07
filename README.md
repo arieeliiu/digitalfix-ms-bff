@@ -143,7 +143,7 @@ solicitanteId
 Workorders
 ```
 
-Actualmente las consultas de órdenes están limitadas a las órdenes asociadas al solicitante autenticado.
+Cliente consulta sus propias órdenes. Admin y Operador conservan las consultas globales que implementa el código actual.
 
 ## Repuestos asociados a órdenes
 
@@ -368,3 +368,20 @@ No debe publicarse como una ruta de negocio en API Gateway.
 ## Flujo de trabajo
 
 Los cambios deben integrarse mediante ramas y Pull Requests antes de incorporarse a `main`.
+
+## Refactor por capas (5 de octubre de 2026)
+
+`ControladorOrdenes` / `ControladorCatalogo` delegan en `ServicioOrdenes` /
+`ServicioCatalogo`, y estos utilizan `ClienteOrdenes` / `ClienteCatalogo`.
+Los DTOs están en `dto/request` y `dto/response`; la configuración técnica está
+en `config/security` y `config/client`, y los errores en `exception`.
+
+**Configuración efectiva:** las URLs se leen de `digitalfix.catalog-url` y
+`digitalfix.workorders-url`. Las referencias anteriores a `CATALOG_URL` y
+`WORKORDERS_URL` describen la intención de Compose, pero esas variables no están
+vinculadas en las properties actuales. La discrepancia se conserva y documenta
+para resolverla como cambio de despliegue separado.
+
+[REFACTOR.md](REFACTOR.md) contiene el inventario integrado, contratos conservados,
+archivos creados/movidos/renombrados, verificación con Java 21 y deuda técnica.
+Notify, Audit y Report permanecen documentales y fuera del flujo activo.

@@ -5,5 +5,5 @@ import java.util.List;
 public record CambioEstadoRequest(
         String status,
         String tecnicoId,
-        List<RepuestoOrdenRequest> repuestos
+        List<RepuestoRequest> repuestos
 ) {}

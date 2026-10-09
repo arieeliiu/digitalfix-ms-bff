@@ -10,7 +10,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
-public class ManejadorGlobalExcepciones {
+public class GlobalExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     ProblemDetail negocio(ResponseStatusException error) {
         return ProblemDetail.forStatusAndDetail(error.getStatusCode(), error.getReason() == null ? "Solicitud rechazada" : error.getReason());

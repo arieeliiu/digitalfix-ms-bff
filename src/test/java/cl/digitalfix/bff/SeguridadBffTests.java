@@ -188,6 +188,22 @@ class SeguridadBffTests {
             .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("CREADA"));
     }
 
+    @ParameterizedTest
+    @CsvSource({"Admin", "Operador"})
+    void conservaConsultaGlobalYAccesoAOrdenAjena(String rol) throws Exception {
+        String token = crearToken(rol);
+        cliente.perform(get("/api/workorders").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+        assertNull(FILTRO_INTERNO.get());
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+
+        cliente.perform(get("/api/workorders/2").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.solicitanteId").value("otra-persona"));
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+    }
+
     @Test
     void noRevelaOrdenDeOtraPersona() throws Exception {
         cliente.perform(get("/api/workorders/2").header("Authorization", "Bearer " + crearToken("Cliente")))

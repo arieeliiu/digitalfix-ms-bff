@@ -1,26 +1,26 @@
 package cl.digitalfix.bff.service;
 
 import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import cl.digitalfix.bff.client.ClienteOrdenes;
+
+import lombok.RequiredArgsConstructor;
+
+import cl.digitalfix.bff.client.OrdenClient;
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
 import cl.digitalfix.bff.dto.request.CrearOrdenDominioRequest;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.bff.dto.response.OrdenResponse;
 
 @Service
-public class ServicioOrdenes {
+@RequiredArgsConstructor
+public class OrdenService {
 
-    private final ClienteOrdenes ordenes;
-    private final ServicioCatalogo catalogo;
-
-    public ServicioOrdenes(ClienteOrdenes ordenes, ServicioCatalogo catalogo) {
-        this.ordenes = ordenes;
-        this.catalogo = catalogo;
-    }
+    private final OrdenClient ordenes;
+    private final CatalogoService catalogo;
 
     public List<OrdenResponse> listarOrdenes(Jwt jwt) {
 

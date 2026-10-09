@@ -1,20 +1,24 @@
 package cl.digitalfix.bff.controller;
 
 import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-import cl.digitalfix.bff.service.ServicioOrdenes;
+
+import lombok.RequiredArgsConstructor;
+
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.bff.dto.response.OrdenResponse;
+import cl.digitalfix.bff.service.OrdenService;
 
 @RestController
 @RequestMapping("/api")
-public class ControladorOrdenes {
-    private final ServicioOrdenes servicios;
-    public ControladorOrdenes(ServicioOrdenes servicios) { this.servicios = servicios; }
+@RequiredArgsConstructor
+public class OrdenController {
+    private final OrdenService servicios;
 
     @GetMapping("/workorders")
     public List<OrdenResponse> ordenes(@AuthenticationPrincipal Jwt jwt) {

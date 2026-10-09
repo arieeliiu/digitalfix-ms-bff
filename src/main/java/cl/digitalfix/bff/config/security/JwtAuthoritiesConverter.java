@@ -1,6 +1,7 @@
 package cl.digitalfix.bff.config.security;
 
 import java.util.ArrayList;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.GrantedAuthority;
@@ -8,7 +9,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 
 @Configuration
-public class ConversorJwt {
+public class JwtAuthoritiesConverter {
     @Bean
     JwtAuthenticationConverter convertirAutorizaciones() {
         // Convierte los scopes del token en permisos con prefijo SCOPE_.

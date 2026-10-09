@@ -1,6 +1,6 @@
 package cl.digitalfix.bff.dto.request;
 
-public record RepuestoOrdenRequest(
+public record RepuestoRequest(
         Long repuestoId,
         Integer cantidad
 ) {}

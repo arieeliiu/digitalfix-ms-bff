@@ -1,20 +1,21 @@
 package cl.digitalfix.bff.service;
 
 import java.util.List;
-import org.springframework.stereotype.Service;
-import org.springframework.security.oauth2.jwt.Jwt;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import cl.digitalfix.bff.client.ClienteCatalogo;
+
+import lombok.RequiredArgsConstructor;
+
+import cl.digitalfix.bff.client.CatalogoClient;
 import cl.digitalfix.bff.dto.response.ServicioCatalogoResponse;
 
 @Service
-public class ServicioCatalogo {
-    private final ClienteCatalogo cliente;
-
-    public ServicioCatalogo(ClienteCatalogo cliente) {
-        this.cliente = cliente;
-    }
+@RequiredArgsConstructor
+public class CatalogoService {
+    private final CatalogoClient cliente;
 
     public List<ServicioCatalogoResponse> listarServicios(Jwt jwt) {
         var resultado = cliente.listar(jwt);

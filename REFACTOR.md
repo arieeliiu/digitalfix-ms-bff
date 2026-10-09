@@ -247,3 +247,10 @@ Los tests existentes se adaptan a imports y accesores de los DTOs independientes
 Documentación: se crea este REFACTOR.md y se actualizan los README de los seis
 módulos. No se eliminan implementaciones de mensajería; solo existían menciones
 documentales de funcionalidades futuras.
+
+
+## Actualización de nomenclatura del 9 de octubre de 2026
+
+Los nombres descritos en este informe corresponden al refactor por capas del
+5 de octubre. La convención actual y Lombok se documentan en
+[REFACTOR_LOMBOK.md](REFACTOR_LOMBOK.md), conservando la lógica de esta etapa.

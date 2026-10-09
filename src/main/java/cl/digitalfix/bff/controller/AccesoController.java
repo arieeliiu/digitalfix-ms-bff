@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
-public class ControladorAcceso {
+public class AccesoController {
 
     // Requiere un token válido con el scope access_as_user.
     @GetMapping("/perfil")

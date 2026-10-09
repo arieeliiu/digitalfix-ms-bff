@@ -1,21 +1,23 @@
 package cl.digitalfix.bff.client;
 
 import java.util.List;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
 import cl.digitalfix.bff.dto.request.CrearOrdenDominioRequest;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.bff.dto.response.OrdenResponse;
 
 @Component
-public class ClienteOrdenes {
+public class OrdenClient {
     private final RestClient cliente;
 
-    public ClienteOrdenes(@Qualifier("workordersRestClient") RestClient cliente) {
+    public OrdenClient(@Qualifier("workordersRestClient") RestClient cliente) {
         this.cliente = cliente;
     }
 

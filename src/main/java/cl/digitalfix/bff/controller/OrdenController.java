@@ -1,48 +1,49 @@
 package cl.digitalfix.bff.controller;
 
 import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-import cl.digitalfix.bff.service.ServiciosDominio;
-import cl.digitalfix.bff.service.ServiciosDominio.*;
+
+import lombok.RequiredArgsConstructor;
+
+import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
+import cl.digitalfix.bff.dto.response.OrdenResponse;
+import cl.digitalfix.bff.service.OrdenService;
 
 @RestController
 @RequestMapping("/api")
-public class ControladorNegocio {
-    private final ServiciosDominio servicios;
-    public ControladorNegocio(ServiciosDominio servicios) { this.servicios = servicios; }
-
-    @GetMapping("/catalog/services")
-    public List<ServicioCatalogo> catalogo(@AuthenticationPrincipal Jwt jwt) {
-        return servicios.listarServicios(jwt);
-    }
+@RequiredArgsConstructor
+public class OrdenController {
+    private final OrdenService servicios;
 
     @GetMapping("/workorders")
-    public List<Orden> ordenes(@AuthenticationPrincipal Jwt jwt) {
+    public List<OrdenResponse> ordenes(@AuthenticationPrincipal Jwt jwt) {
         return servicios.listarOrdenes(jwt);
     }
 
     @GetMapping("/workorders/{id}")
-    public Orden orden(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+    public OrdenResponse orden(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         return servicios.consultarOrden(id, jwt);
     }
 
     @PostMapping("/workorders")
     @ResponseStatus(HttpStatus.CREATED)
-    public Orden crear(@RequestBody NuevaOrden solicitud, @AuthenticationPrincipal Jwt jwt) {
+    public OrdenResponse crear(@RequestBody NuevaOrdenRequest solicitud, @AuthenticationPrincipal Jwt jwt) {
         return servicios.crearOrden(solicitud, jwt);
     }
 
     @PutMapping("/workorders/{id}")
-    public Orden actualizar(@PathVariable Long id, @RequestBody NuevaOrden solicitud,
+    public OrdenResponse actualizar(@PathVariable Long id, @RequestBody NuevaOrdenRequest solicitud,
             @AuthenticationPrincipal Jwt jwt) {
         return servicios.actualizarOrden(id, solicitud, jwt);
     }
 
     @PutMapping("/workorders/{id}/status")
-    public Orden cambiarEstado(@PathVariable Long id, @RequestBody CambioEstado solicitud,
+    public OrdenResponse cambiarEstado(@PathVariable Long id, @RequestBody CambioEstadoRequest solicitud,
             @AuthenticationPrincipal Jwt jwt) {
         return servicios.cambiarEstado(id, solicitud, jwt);
     }

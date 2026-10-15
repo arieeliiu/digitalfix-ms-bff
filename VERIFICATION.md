@@ -1,4 +1,9 @@
-# Verificación — 15 de septiembre de 2026
+# Registro histórico de verificación — 15 de septiembre de 2026
+
+> Este documento conserva los resultados observados en esa fecha.
+> No describe necesariamente el estado actual del sistema.
+> Los errores y pendientes registrados requieren una nueva comprobación
+> antes de considerarse vigentes.
 
 ## Inspección inicial
 

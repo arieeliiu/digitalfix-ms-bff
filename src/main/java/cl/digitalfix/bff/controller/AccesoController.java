@@ -8,17 +8,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
-public class ControladorAcceso {
+public class AccesoController {
 
     // Requiere un token válido con el scope access_as_user.
     @GetMapping("/perfil")
     public Map<String, String> consultarPerfil() {
         return Map.of("mensaje", "Acceso autenticado a DigitalFix.");
-    }
-
-    // Requiere además el rol Admin, según ConfiguracionSeguridad.
-    @GetMapping("/administracion")
-    public Map<String, String> consultarAdministracion() {
-        return Map.of("mensaje", "Acceso de administrador a DigitalFix.");
     }
 }

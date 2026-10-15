@@ -87,7 +87,7 @@ Antes de crear o actualizar una orden, el BFF comprueba que el servicio seleccio
 La URL del microservicio se configura mediante:
 
 ```text
-CATALOG_URL
+DIGITALFIX_CATALOG_URL
 ```
 
 En desarrollo local se utiliza:
@@ -112,7 +112,7 @@ Actualmente permite:
 La URL del microservicio se configura mediante:
 
 ```text
-WORKORDERS_URL
+DIGITALFIX_WORKORDERS_URL
 ```
 
 En desarrollo local se utiliza:
@@ -251,15 +251,15 @@ Esto permite que posteriormente el frontend pueda mostrar los repuestos asociado
 Las direcciones de los microservicios se configuran mediante:
 
 ```text
-CATALOG_URL
-WORKORDERS_URL
+DIGITALFIX_CATALOG_URL
+DIGITALFIX_WORKORDERS_URL
 ```
 
 En desarrollo local los valores utilizados son:
 
 ```text
-CATALOG_URL=http://localhost:8081
-WORKORDERS_URL=http://localhost:8082
+DIGITALFIX_CATALOG_URL=http://localhost:8081
+DIGITALFIX_WORKORDERS_URL=http://localhost:8082
 ```
 
 En ejecución mediante contenedores deben configurarse con las direcciones internas correspondientes.
@@ -267,8 +267,8 @@ En ejecución mediante contenedores deben configurarse con las direcciones inter
 Ejemplo:
 
 ```text
-CATALOG_URL=http://catalog:8081
-WORKORDERS_URL=http://workorders:8082
+DIGITALFIX_CATALOG_URL=http://catalog:8081
+DIGITALFIX_WORKORDERS_URL=http://workorders:8082
 ```
 
 El BFF no utiliza una base de datos propia y no requiere credenciales Oracle.
@@ -376,11 +376,7 @@ Los cambios deben integrarse mediante ramas y Pull Requests antes de incorporars
 Los DTOs están en `dto/request` y `dto/response`; la configuración técnica está
 en `config/security` y `config/client`, y los errores en `exception`.
 
-**Configuración efectiva:** las URLs se leen de `digitalfix.catalog-url` y
-`digitalfix.workorders-url`. Las referencias anteriores a `CATALOG_URL` y
-`WORKORDERS_URL` describen la intención de Compose, pero esas variables no están
-vinculadas en las properties actuales. La discrepancia se conserva y documenta
-para resolverla como cambio de despliegue separado.
+**Configuración efectiva:** el único Compose está en `../digitalfix-infra/docker-compose.yml`. Configura `digitalfix.catalog-url` y `digitalfix.workorders-url` mediante `DIGITALFIX_CATALOG_URL=http://catalog:8081` y `DIGITALFIX_WORKORDERS_URL=http://workorders:8082`. El Dockerfile compila desde el código fuente con Java 21; no requiere un JAR previo en el host. El BFF no necesita credenciales de Oracle. Consulta el README de infraestructura para desplegar los tres servicios.
 
 [REFACTOR.md](REFACTOR.md) contiene el inventario integrado, contratos conservados,
 archivos creados/movidos/renombrados, verificación con Java 21 y deuda técnica.

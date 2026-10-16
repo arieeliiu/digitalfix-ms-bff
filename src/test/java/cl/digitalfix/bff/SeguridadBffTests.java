@@ -19,6 +19,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpMethod;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,6 +29,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -48,6 +51,9 @@ class SeguridadBffTests {
     private static final AtomicReference<String> FILTRO_INTERNO = new AtomicReference<>();
     private static final AtomicReference<String> METODO_INTERNO = new AtomicReference<>();
     private static final AtomicInteger CREACIONES = new AtomicInteger();
+    private static final AtomicInteger CONSULTAS_CATALOGO = new AtomicInteger();
+    private static final AtomicInteger ESTADO_ESCRITURA_CATALOGO = new AtomicInteger();
+    private static final AtomicReference<String> RUTA_INTERNA = new AtomicReference<>();
     private static final AtomicInteger CONSULTAS_REPUESTOS = new AtomicInteger();
     private static final AtomicInteger ESTADO_REPUESTOS = new AtomicInteger(200);
     private static final String REPUESTOS = """
@@ -238,11 +244,12 @@ class SeguridadBffTests {
 
     @Test
     void flujoCatalogoCrearYConsultarConJwtFirmado() throws Exception {
-        String token = crearToken("Cliente");
-        cliente.perform(get("/api/catalog/services").header("Authorization", "Bearer " + token))
+        String tokenCatalogo = crearToken("Admin");
+        cliente.perform(get("/api/catalog/services").header("Authorization", "Bearer " + tokenCatalogo))
             .andExpect(status().isOk()).andExpect(jsonPath("$[0].tarifa").value(25000));
-        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+        assertEquals("Bearer " + tokenCatalogo, TOKEN_INTERNO.get());
 
+        String token = crearToken("Cliente");
         cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + token)
             .contentType(MediaType.APPLICATION_JSON).content("""
                 {"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123","solicitanteId":"otra-persona"}
@@ -366,6 +373,125 @@ class SeguridadBffTests {
                 .andExpect(jsonPath("$.detail").value("Orden no encontrada"));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"services", "spare-parts"})
+    void adminPuedeCrudCatalogoConContratoYBearer(String recurso) throws Exception {
+        String token = crearToken("Admin");
+        String ruta = "/api/catalog/" + recurso;
+        String campo = recurso.equals("services") ? "tarifa" : "stock";
+        String cuerpo = recurso.equals("services")
+                ? "{\"id\":31,\"nombre\":\"Mantención\",\"descripcion\":null,\"tarifa\":12345.67}"
+                : "{\"id\":31,\"nombre\":\"Cable\",\"descripcion\":\"Cable eléctrico\",\"stock\":12}";
+
+        cliente.perform(get(ruta).header("Authorization", "Bearer " + token)).andExpect(status().isOk());
+        assertEquals("GET", METODO_INTERNO.get());
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+        assertEquals(ruta, RUTA_INTERNA.get());
+
+        for (String metodo : List.of("POST", "PUT")) {
+            String destino = metodo.equals("POST") ? ruta : ruta + "/31";
+            cliente.perform(request(HttpMethod.valueOf(metodo), destino)
+                    .header("Authorization", "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                    .andExpect(status().is(metodo.equals("POST") ? 201 : 200))
+                    .andExpect(jsonPath("$.id").value(31))
+                    .andExpect(jsonPath("$.nombre").value(recurso.equals("services") ? "Mantención" : "Cable"))
+                    .andExpect(jsonPath("$." + campo).value(recurso.equals("services") ? 12345.67 : 12));
+            org.skyscreamer.jsonassert.JSONAssert.assertEquals(cuerpo, CUERPO_INTERNO.get(), true);
+            assertEquals(metodo, METODO_INTERNO.get());
+            assertEquals(destino, RUTA_INTERNA.get());
+            assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+        }
+
+        cliente.perform(delete(ruta + "/31").header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(""));
+        assertEquals("DELETE", METODO_INTERNO.get());
+        assertEquals(ruta + "/31", RUTA_INTERNA.get());
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"Operador,200,403", "Cliente,403,403", "sin_scope,403,403", "sin_rol,403,403", "sin_token,401,401"})
+    void permisosCatalogoPorRecursoYMetodo(String caso, int lectura, int escritura) throws Exception {
+        for (String recurso : List.of("services", "spare-parts")) {
+            for (String metodo : List.of("GET", "POST", "PUT", "DELETE")) {
+                String ruta = "/api/catalog/" + recurso + (List.of("PUT", "DELETE").contains(metodo) ? "/31" : "");
+                var solicitud = request(HttpMethod.valueOf(metodo), ruta)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}");
+                if (!caso.equals("sin_token")) solicitud.header("Authorization", "Bearer " + crearToken(caso));
+                int antes = CONSULTAS_CATALOGO.get();
+                int esperado = metodo.equals("GET") ? lectura : escritura;
+                cliente.perform(solicitud).andExpect(status().is(esperado));
+                assertEquals(antes + (esperado == 200 ? 1 : 0), CONSULTAS_CATALOGO.get());
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Admin", "Operador", "Cliente"})
+    void descuentoStockNuncaSeExpone(String rol) throws Exception {
+        int antes = CONSULTAS_CATALOGO.get();
+        for (String metodo : List.of("GET", "POST", "PUT", "DELETE")) {
+            cliente.perform(request(HttpMethod.valueOf(metodo), "/api/catalog/spare-parts/discount-stock")
+                    .header("Authorization", "Bearer " + crearToken(rol))
+                    .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isForbidden());
+        }
+        assertEquals(antes, CONSULTAS_CATALOGO.get());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {400, 404, 409})
+    void conservaErroresDeCatalogoEnEscrituras(int codigo) throws Exception {
+        ESTADO_ESCRITURA_CATALOGO.set(codigo);
+        try {
+            for (String recurso : List.of("services", "spare-parts")) {
+                for (String metodo : List.of("POST", "PUT", "DELETE")) {
+                    String ruta = "/api/catalog/" + recurso + (metodo.equals("POST") ? "" : "/31");
+                    cliente.perform(request(HttpMethod.valueOf(metodo), ruta)
+                            .header("Authorization", "Bearer " + crearToken("Admin"))
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                            .andExpect(status().is(codigo))
+                            .andExpect(jsonPath("$.detail").value("El servicio rechazó la operación solicitada"));
+                }
+            }
+        } finally {
+            ESTADO_ESCRITURA_CATALOGO.set(0);
+        }
+    }
+
+    @Test
+    void escriturasSinRespuestaDeCatalogoDevuelven502() throws Exception {
+        ESTADO_ESCRITURA_CATALOGO.set(204);
+        try {
+            for (String recurso : List.of("services", "spare-parts")) {
+                for (String metodo : List.of("POST", "PUT")) {
+                    String ruta = "/api/catalog/" + recurso + (metodo.equals("POST") ? "" : "/31");
+                    cliente.perform(request(HttpMethod.valueOf(metodo), ruta)
+                            .header("Authorization", "Bearer " + crearToken("Admin"))
+                            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                            .andExpect(status().isBadGateway())
+                            .andExpect(jsonPath("$.detail").value("Catálogo sin respuesta"));
+                }
+            }
+        } finally {
+            ESTADO_ESCRITURA_CATALOGO.set(0);
+        }
+    }
+
+    @Test
+    void conservaStockOmitidoYCeroYNullExplicitoSegunContratoCatalogo() throws Exception {
+        for (String stock : List.of("", ",\"stock\":0", ",\"stock\":null")) {
+            String cuerpo = "{\"id\":31,\"nombre\":\"Cable\",\"descripcion\":\"Cable eléctrico\"" + stock + "}";
+            cliente.perform(post("/api/catalog/spare-parts")
+                    .header("Authorization", "Bearer " + crearToken("Admin"))
+                    .contentType(MediaType.APPLICATION_JSON).content(cuerpo)).andExpect(status().isCreated());
+            String esperado = stock.isEmpty() ? cuerpo.replace("}", ",\"stock\":0}") : cuerpo;
+            org.skyscreamer.jsonassert.JSONAssert.assertEquals(esperado, CUERPO_INTERNO.get(), true);
+        }
+    }
+
     private static RSAKey generarClave() {
         try {
             return new RSAKeyGenerator(2048)
@@ -397,9 +523,27 @@ class SeguridadBffTests {
                 TOKEN_INTERNO.set(intercambio.getRequestHeaders().getFirst("Authorization"));
                 METODO_INTERNO.set(intercambio.getRequestMethod());
                 String ruta = intercambio.getRequestURI().getPath();
+                RUTA_INTERNA.set(ruta);
+                if (ruta.startsWith("/api/catalog/")) CONSULTAS_CATALOGO.incrementAndGet();
                 String respuesta;
                 int status = 200;
-                if (ruta.equals("/api/catalog/services")) {
+                if (ruta.startsWith("/api/catalog/") && !intercambio.getRequestMethod().equals("GET")) {
+                    CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                    status = ESTADO_ESCRITURA_CATALOGO.get();
+                    if (status == 0) {
+                        status = switch (intercambio.getRequestMethod()) {
+                            case "POST" -> 201;
+                            case "DELETE" -> 204;
+                            default -> 200;
+                        };
+                    }
+                    if (status == 204) {
+                        intercambio.sendResponseHeaders(204, -1);
+                        intercambio.close();
+                        return;
+                    }
+                    respuesta = status >= 400 ? "{}" : CUERPO_INTERNO.get();
+                } else if (ruta.equals("/api/catalog/services")) {
                     respuesta = "[{\"id\":1,\"nombre\":\"Mantención\",\"descripcion\":\"Revisión\",\"tarifa\":25000}]";
                 } else if (ruta.equals("/api/catalog/spare-parts")) {
                     CONSULTAS_REPUESTOS.incrementAndGet();

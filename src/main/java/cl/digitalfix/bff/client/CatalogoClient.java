@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import cl.digitalfix.bff.dto.response.ServicioCatalogoResponse;
+import cl.digitalfix.bff.dto.response.RepuestoCatalogoResponse;
 
 @Component
 public class CatalogoClient {
@@ -22,5 +23,11 @@ public class CatalogoClient {
         return cliente.get().uri("/api/catalog/services")
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
                 .retrieve().body(new ParameterizedTypeReference<List<ServicioCatalogoResponse>>() {});
+    }
+
+    public List<RepuestoCatalogoResponse> listarRepuestos(Jwt jwt) {
+        return cliente.get().uri("/api/catalog/spare-parts")
+                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                .retrieve().body(new ParameterizedTypeReference<List<RepuestoCatalogoResponse>>() {});
     }
 }

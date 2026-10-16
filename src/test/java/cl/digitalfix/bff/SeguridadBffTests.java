@@ -244,7 +244,7 @@ class SeguridadBffTests {
 
     @Test
     void flujoCatalogoCrearYConsultarConJwtFirmado() throws Exception {
-        String tokenCatalogo = crearToken("Admin");
+        String tokenCatalogo = crearToken("Cliente");
         cliente.perform(get("/api/catalog/services").header("Authorization", "Bearer " + tokenCatalogo))
             .andExpect(status().isOk()).andExpect(jsonPath("$[0].tarifa").value(25000));
         assertEquals("Bearer " + tokenCatalogo, TOKEN_INTERNO.get());
@@ -412,9 +412,10 @@ class SeguridadBffTests {
     }
 
     @ParameterizedTest
-    @CsvSource({"Operador,200,403", "Cliente,403,403", "sin_scope,403,403", "sin_rol,403,403", "sin_token,401,401"})
-    void permisosCatalogoPorRecursoYMetodo(String caso, int lectura, int escritura) throws Exception {
+    @CsvSource({"Operador,200,200,403", "Cliente,200,403,403", "sin_scope,403,403,403", "sin_rol,403,403,403", "sin_token,401,401,401"})
+    void permisosCatalogoPorRecursoYMetodo(String caso, int lecturaServicios, int lecturaRepuestos, int escritura) throws Exception {
         for (String recurso : List.of("services", "spare-parts")) {
+            int lectura = recurso.equals("services") ? lecturaServicios : lecturaRepuestos;
             for (String metodo : List.of("GET", "POST", "PUT", "DELETE")) {
                 String ruta = "/api/catalog/" + recurso + (List.of("PUT", "DELETE").contains(metodo) ? "/31" : "");
                 var solicitud = request(HttpMethod.valueOf(metodo), ruta)

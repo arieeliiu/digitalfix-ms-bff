@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.bff.dto.response.ServicioCatalogoResponse;
+import cl.digitalfix.bff.dto.response.RepuestoCatalogoResponse;
 import cl.digitalfix.bff.service.CatalogoService;
 
 @RestController
@@ -20,5 +21,10 @@ public class CatalogoController {
     @GetMapping("/services")
     public List<ServicioCatalogoResponse> catalogo(@AuthenticationPrincipal Jwt jwt) {
         return servicio.listarServicios(jwt);
+    }
+
+    @GetMapping("/spare-parts")
+    public List<RepuestoCatalogoResponse> repuestos(@AuthenticationPrincipal Jwt jwt) {
+        return servicio.listarRepuestos(jwt);
     }
 }

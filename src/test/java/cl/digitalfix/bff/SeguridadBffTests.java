@@ -48,6 +48,13 @@ class SeguridadBffTests {
     private static final AtomicReference<String> FILTRO_INTERNO = new AtomicReference<>();
     private static final AtomicReference<String> METODO_INTERNO = new AtomicReference<>();
     private static final AtomicInteger CREACIONES = new AtomicInteger();
+    private static final AtomicInteger CONSULTAS_REPUESTOS = new AtomicInteger();
+    private static final AtomicInteger ESTADO_REPUESTOS = new AtomicInteger(200);
+    private static final String REPUESTOS = """
+        [{"id":3,"nombre":"Cable","descripcion":"Cable eléctrico","stock":10},
+         {"id":7,"nombre":"Interruptor","descripcion":null,"stock":0}]
+        """;
+    private static final AtomicReference<String> RESPUESTA_REPUESTOS = new AtomicReference<>(REPUESTOS);
     private static final String ORDEN = """
         {"id":1,"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123",
          "solicitanteId":"usuario-prueba","estado":"CREADA","fechaCreacion":"2026-09-15T00:00:00Z"}
@@ -154,6 +161,72 @@ class SeguridadBffTests {
             caso.equals("firma_invalida") ? OTRA_CLAVE : CLAVE
         ));
         return token.serialize();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"Admin", "Operador"})
+    void consultaRepuestosConContratoYBearer(String rol) throws Exception {
+        String token = crearToken(rol);
+        int antes = CONSULTAS_REPUESTOS.get();
+        cliente.perform(get("/api/catalog/spare-parts").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(3))
+                .andExpect(jsonPath("$[0].nombre").value("Cable"))
+                .andExpect(jsonPath("$[0].descripcion").value("Cable eléctrico"))
+                .andExpect(jsonPath("$[0].stock").value(10))
+                .andExpect(jsonPath("$[1].descripcion").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$[1].stock").value(0));
+        assertEquals(antes + 1, CONSULTAS_REPUESTOS.get());
+        assertEquals("GET", METODO_INTERNO.get());
+        assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"Cliente,403", "sin_scope,403", "sin_rol,403", "sin_token,401"})
+    void rechazaRepuestosSinPermisosAntesDeConsultarCatalogo(String caso, int estado) throws Exception {
+        int antes = CONSULTAS_REPUESTOS.get();
+        var solicitud = get("/api/catalog/spare-parts");
+        if (!caso.equals("sin_token")) {
+            solicitud.header("Authorization", "Bearer " + crearToken(caso));
+        }
+        cliente.perform(solicitud).andExpect(status().is(estado));
+        assertEquals(antes, CONSULTAS_REPUESTOS.get());
+    }
+
+    @Test
+    void repuestosSinRespuestaDevuelve502() throws Exception {
+        ESTADO_REPUESTOS.set(204);
+        try {
+            cliente.perform(get("/api/catalog/spare-parts").header("Authorization", "Bearer " + crearToken("Admin")))
+                    .andExpect(status().isBadGateway())
+                    .andExpect(jsonPath("$.detail").value("Catálogo sin respuesta"));
+        } finally {
+            ESTADO_REPUESTOS.set(200);
+        }
+    }
+
+    @Test
+    void catalogoSinRepuestosDevuelveListaVacia() throws Exception {
+        RESPUESTA_REPUESTOS.set("[]");
+        try {
+            cliente.perform(get("/api/catalog/spare-parts").header("Authorization", "Bearer " + crearToken("Admin")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(0));
+        } finally {
+            RESPUESTA_REPUESTOS.set(REPUESTOS);
+        }
+    }
+
+    @Test
+    void falloDeCatalogoAlConsultarRepuestosDevuelve502() throws Exception {
+        ESTADO_REPUESTOS.set(500);
+        try {
+            cliente.perform(get("/api/catalog/spare-parts").header("Authorization", "Bearer " + crearToken("Operador")))
+                    .andExpect(status().isBadGateway());
+        } finally {
+            ESTADO_REPUESTOS.set(200);
+        }
     }
 
     @Test
@@ -328,6 +401,15 @@ class SeguridadBffTests {
                 int status = 200;
                 if (ruta.equals("/api/catalog/services")) {
                     respuesta = "[{\"id\":1,\"nombre\":\"Mantención\",\"descripcion\":\"Revisión\",\"tarifa\":25000}]";
+                } else if (ruta.equals("/api/catalog/spare-parts")) {
+                    CONSULTAS_REPUESTOS.incrementAndGet();
+                    status = ESTADO_REPUESTOS.get();
+                    if (status == 204) {
+                        intercambio.sendResponseHeaders(204, -1);
+                        intercambio.close();
+                        return;
+                    }
+                    respuesta = RESPUESTA_REPUESTOS.get();
                 } else if (intercambio.getRequestMethod().equals("POST")) {
                     CREACIONES.incrementAndGet();
                     CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));

@@ -2,7 +2,7 @@
 
 Backend for Frontend de DigitalFix.
 
-Centraliza las solicitudes provenientes del frontend, valida la identidad y los permisos mediante JWT y coordina la comunicación con los microservicios de dominio.
+Centraliza las solicitudes provenientes del frontend, valida identidad y permisos mediante JWT y coordina la comunicación con los microservicios internos.
 
 ## Integrantes
 
@@ -18,28 +18,51 @@ Centraliza las solicitudes provenientes del frontend, valida la identidad y los 
 - RestClient
 - Microsoft Entra ID
 - Maven
+- Docker
 
-## Responsabilidad del BFF
+## Arquitectura
 
-El BFF actúa como intermediario entre el frontend y los microservicios internos.
+El BFF es el punto de entrada del backend después de AWS API Gateway.
 
-Flujo general:
+El flujo actual es:
 
 ```text
-Frontend
-    ↓
-API Gateway
-    ↓
+Angular
+   ↓
+AWS API Gateway
+   ↓
 BFF
-    ├──→ Workorders
-    └──→ Catalog
+   ├──→ Catalog
+   └──→ Workorders
+            ↓
+          Catalog
+   ↓
+Oracle RDS
 ```
 
-El frontend no debe comunicarse directamente con Workorders o Catalog.
+El frontend no se comunica directamente con Catalog ni Workorders.
+
+## Responsabilidades
+
+El BFF se encarga de:
+
+- validar los JWT recibidos desde el frontend;
+- verificar scope y roles;
+- obtener la identidad del usuario autenticado;
+- aplicar reglas de autorización;
+- filtrar órdenes según el rol;
+- validar datos antes de enviarlos a los microservicios;
+- reenviar solicitudes hacia Catalog y Workorders;
+- propagar el Bearer token hacia los microservicios internos;
+- ocultar al frontend las direcciones internas de los servicios.
+
+El BFF no utiliza una base de datos propia.
 
 ## Seguridad
 
-El BFF valida los access tokens emitidos por Microsoft Entra ID.
+El BFF funciona como OAuth2 Resource Server.
+
+Valida access tokens emitidos por Microsoft Entra ID.
 
 Se verifican:
 
@@ -50,7 +73,11 @@ Se verifican:
 - scope `access_as_user`;
 - roles de la aplicación.
 
-Roles considerados actualmente:
+El issuer configurado corresponde al tenant de DigitalFix y la audience corresponde a DigitalFix API.
+
+## Roles
+
+Los roles utilizados actualmente son:
 
 ```text
 Admin
@@ -58,80 +85,77 @@ Operador
 Cliente
 ```
 
-La identidad del usuario se obtiene mediante el claim:
+### Admin
+
+Puede:
+
+- consultar todas las órdenes;
+- crear órdenes;
+- actualizar órdenes;
+- cambiar estados;
+- eliminar órdenes cuando las reglas de dominio lo permiten;
+- consultar servicios;
+- consultar repuestos;
+- crear servicios;
+- actualizar servicios;
+- eliminar servicios;
+- crear repuestos;
+- actualizar repuestos;
+- eliminar repuestos.
+
+### Operador
+
+Puede:
+
+- consultar todas las órdenes;
+- crear órdenes;
+- actualizar órdenes;
+- cambiar estados;
+- eliminar órdenes cuando corresponde;
+- consultar servicios;
+- consultar repuestos.
+
+No puede realizar operaciones administrativas de escritura sobre el catálogo.
+
+### Cliente
+
+Puede:
+
+- consultar sus propias órdenes;
+- crear órdenes;
+- consultar una orden propia;
+- actualizar sus propias órdenes;
+- eliminar sus propias órdenes cuando las reglas de dominio lo permiten;
+- consultar servicios.
+
+No puede:
+
+- cambiar estados administrativos;
+- consultar repuestos;
+- modificar el catálogo;
+- acceder a órdenes pertenecientes a otros usuarios.
+
+## Identidad del usuario
+
+La identidad se obtiene desde el claim:
 
 ```text
 oid
 ```
 
-No se utiliza `sub` como fallback.
+del JWT.
 
-Si una operación de órdenes requiere identidad y el token no contiene un `oid` válido, el BFF responde:
-
-```text
-403 Forbidden
-```
-
-## Integración con Catalog
-
-El BFF consulta Catalog para obtener los servicios técnicos disponibles.
-
-Endpoint interno utilizado:
-
-```http
-GET /api/catalog/services
-```
-
-Antes de crear o actualizar una orden, el BFF comprueba que el servicio seleccionado exista en Catalog.
-
-La URL del microservicio se configura mediante:
-
-```text
-DIGITALFIX_CATALOG_URL
-```
-
-En desarrollo local se utiliza:
-
-```text
-http://localhost:8081
-```
-
-## Integración con Workorders
-
-El BFF coordina las operaciones relacionadas con órdenes de trabajo.
-
-Actualmente permite:
-
-- crear órdenes;
-- listar órdenes;
-- consultar una orden;
-- actualizar una orden;
-- cambiar su estado;
-- eliminar una orden cuando corresponde.
-
-La URL del microservicio se configura mediante:
-
-```text
-DIGITALFIX_WORKORDERS_URL
-```
-
-En desarrollo local se utiliza:
-
-```text
-http://localhost:8082
-```
-
-## Identidad de las órdenes
-
-Para las operaciones del cliente, el BFF obtiene el identificador del usuario desde el JWT y lo envía internamente como:
+El BFF utiliza este valor como:
 
 ```text
 solicitanteId
 ```
 
-El frontend no necesita proporcionar directamente este identificador.
+para las operaciones relacionadas con órdenes.
 
-Ejemplo del flujo:
+El frontend no debe enviar manualmente el identificador del usuario autenticado.
+
+Flujo:
 
 ```text
 JWT
@@ -143,20 +167,109 @@ solicitanteId
 Workorders
 ```
 
-Cliente consulta sus propias órdenes. Admin y Operador conservan las consultas globales que implementa el código actual.
+Si una operación requiere identidad y el token no contiene un `oid` válido, el BFF responde:
+
+```text
+403 Forbidden
+```
+
+## Endpoint de perfil
+
+Permite verificar que el usuario está autenticado correctamente.
+
+```http
+GET /api/perfil
+```
+
+Requiere:
+
+```text
+scope access_as_user
+```
+
+## Endpoints de órdenes
+
+El BFF expone:
+
+| Método | Ruta | Función |
+|---|---|---|
+| GET | `/api/workorders` | Lista órdenes |
+| GET | `/api/workorders/{id}` | Consulta una orden |
+| POST | `/api/workorders` | Crea una orden |
+| PUT | `/api/workorders/{id}` | Actualiza una orden |
+| PUT | `/api/workorders/{id}/status` | Cambia el estado |
+| DELETE | `/api/workorders/{id}` | Elimina una orden cuando corresponde |
+
+## Creación de órdenes
+
+El frontend envía:
+
+```json
+{
+  "servicioId": 1,
+  "descripcion": "Revisión de instalación eléctrica",
+  "direccion": "Calle de prueba 123"
+}
+```
+
+El BFF agrega internamente la identidad obtenida desde el JWT antes de comunicarse con Workorders.
+
+Ejemplo conceptual:
+
+```text
+Frontend
+envía:
+servicioId
+descripcion
+direccion
+
+BFF agrega:
+solicitanteId = oid del JWT
+```
+
+Antes de crear o actualizar una orden, el BFF comprueba que el servicio seleccionado exista en Catalog.
+
+## Consulta de órdenes por rol
+
+Para `Admin` y `Operador`, el BFF solicita la lista global de órdenes.
+
+Para `Cliente`, el BFF utiliza su `oid` como `solicitanteId` y devuelve únicamente las órdenes que pertenecen al usuario autenticado.
+
+Si un cliente intenta consultar una orden ajena, el BFF responde como orden no encontrada.
+
+## Estados de órdenes
+
+Los estados reconocidos por el BFF son:
+
+```text
+CREADA
+ASIGNADA
+EN_DESPLAZAMIENTO
+EN_EJECUCION
+CERRADA
+CANCELADA
+```
+
+El cambio de estado se realiza mediante:
+
+```http
+PUT /api/workorders/{id}/status
+```
+
+La autorización para cambiar estados corresponde a:
+
+```text
+Admin
+Operador
+```
+
+Las reglas definitivas de transición son aplicadas por Workorders.
 
 ## Repuestos asociados a órdenes
 
-El BFF también transmite y recibe los repuestos asociados a una orden.
+Durante la asignación de una orden se pueden enviar repuestos.
 
-Cada repuesto se representa mediante:
-
-```text
-repuestoId
-cantidad
-```
-
-Ejemplo de cambio de estado:
+Ejemplo:
 
 ```json
 {
@@ -166,112 +279,214 @@ Ejemplo de cambio de estado:
     {
       "repuestoId": 4,
       "cantidad": 2
-    },
-    {
-      "repuestoId": 7,
-      "cantidad": 1
     }
   ]
 }
 ```
 
-El contrato utilizado por el BFF incluye:
-
-```text
-status
-tecnicoId
-repuestos[]
-```
-
-Cada elemento de `repuestos` contiene:
+Cada repuesto debe contener:
 
 ```text
 repuestoId
 cantidad
 ```
 
-## Validación de repuestos
+El BFF valida que:
 
-Antes de enviar una solicitud hacia Workorders, el BFF valida que:
-
-- `repuestoId` exista en la solicitud;
+- `repuestoId` exista;
 - `repuestoId` sea mayor que cero;
 - `cantidad` exista;
 - `cantidad` sea mayor que cero;
 - los repuestos solo se envíen cuando el estado solicitado sea `ASIGNADA`.
 
-Si la solicitud contiene datos inválidos, el BFF responde:
+Si los datos son inválidos, responde:
 
 ```text
 400 Bad Request
 ```
 
-El BFF no descuenta directamente el stock.
+El BFF no descuenta directamente stock.
 
-El flujo completo es:
+El flujo es:
 
 ```text
 Frontend
-    ↓
+   ↓
 BFF
-    ↓
+   ↓
 Workorders
-    ↓
+   ↓
 Catalog
-    ↓
-descuento de stock
+   ↓
+Oracle RDS
 ```
 
-Workorders coordina el descuento con Catalog al asignar la orden.
+Workorders coordina el descuento con Catalog.
 
-## Respuesta de órdenes
+## Catálogo
 
-El modelo de respuesta del BFF también contempla los repuestos almacenados en Workorders.
+El BFF expone operaciones para servicios y repuestos.
 
-Una orden puede contener:
+### Servicios
+
+| Método | Ruta | Rol |
+|---|---|---|
+| GET | `/api/catalog/services` | Admin, Operador, Cliente |
+| POST | `/api/catalog/services` | Admin |
+| PUT | `/api/catalog/services/{id}` | Admin |
+| DELETE | `/api/catalog/services/{id}` | Admin |
+
+### Repuestos
+
+| Método | Ruta | Rol |
+|---|---|---|
+| GET | `/api/catalog/spare-parts` | Admin, Operador |
+| POST | `/api/catalog/spare-parts` | Admin |
+| PUT | `/api/catalog/spare-parts/{id}` | Admin |
+| DELETE | `/api/catalog/spare-parts/{id}` | Admin |
+
+El BFF reenvía estas solicitudes hacia Catalog utilizando el mismo Bearer token recibido desde el frontend.
+
+## Endpoint interno de descuento de stock
+
+Catalog posee internamente:
+
+```http
+POST /api/catalog/spare-parts/discount-stock
+```
+
+Este endpoint no está disponible como operación pública a través del BFF.
+
+El BFF bloquea explícitamente el acceso externo a esa ruta.
+
+El descuento debe ocurrir únicamente mediante:
 
 ```text
-id
-servicioId
-descripcion
-direccion
-solicitanteId
-fechaCreacion
-estado
-tecnicoId
-actualizadoPor
-fechaActualizacion
-repuestos[]
+Workorders
+→ Catalog
 ```
 
-Esto permite que posteriormente el frontend pueda mostrar los repuestos asociados a una orden.
+## Comunicación con Catalog
 
-## Configuración
+La dirección de Catalog se configura mediante:
 
-Las direcciones de los microservicios se configuran mediante:
+```text
+digitalfix.catalog-url
+```
+
+En Docker se utiliza:
+
+```text
+http://catalog:8081
+```
+
+También puede sobrescribirse mediante la variable:
 
 ```text
 DIGITALFIX_CATALOG_URL
+```
+
+En ejecución local puede utilizarse:
+
+```text
+http://localhost:8081
+```
+
+## Comunicación con Workorders
+
+La dirección de Workorders se configura mediante:
+
+```text
+digitalfix.workorders-url
+```
+
+En Docker se utiliza:
+
+```text
+http://workorders:8082
+```
+
+También puede sobrescribirse mediante:
+
+```text
 DIGITALFIX_WORKORDERS_URL
 ```
 
-En desarrollo local los valores utilizados son:
+En ejecución local puede utilizarse:
 
 ```text
-DIGITALFIX_CATALOG_URL=http://localhost:8081
-DIGITALFIX_WORKORDERS_URL=http://localhost:8082
+http://localhost:8082
 ```
 
-En ejecución mediante contenedores deben configurarse con las direcciones internas correspondientes.
+## Propagación del JWT
 
-Ejemplo:
+El BFF reenvía el access token hacia los microservicios internos:
+
+```http
+Authorization: Bearer <token>
+```
+
+Por lo tanto, el flujo de identidad se mantiene durante la comunicación:
 
 ```text
-DIGITALFIX_CATALOG_URL=http://catalog:8081
-DIGITALFIX_WORKORDERS_URL=http://workorders:8082
+Frontend
+→ API Gateway
+→ BFF
+→ Catalog / Workorders
 ```
 
-El BFF no utiliza una base de datos propia y no requiere credenciales Oracle.
+## Health check
+
+El BFF expone:
+
+```http
+GET /healthz
+```
+
+Esta ruta es pública y se utiliza únicamente para comprobar que el servicio está activo.
+
+No contiene información de negocio.
+
+## Configuración
+
+La configuración principal se encuentra en:
+
+```text
+src/main/resources/application.properties
+```
+
+Incluye:
+
+- URL de Catalog;
+- URL de Workorders;
+- issuer de Microsoft Entra ID;
+- audience esperada del JWT.
+
+El BFF no necesita:
+
+```text
+DB_URL
+DB_USERNAME
+DB_PASSWORD
+```
+
+porque no posee persistencia propia.
+
+## Ejecución local
+
+En Windows:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+El servicio utiliza por defecto:
+
+```text
+http://localhost:8080
+```
+
+Para ejecución local, Catalog y Workorders deben estar disponibles en sus respectivas direcciones configuradas.
 
 ## Construcción y pruebas
 
@@ -281,115 +496,157 @@ Ejecutar:
 .\mvnw.cmd -B verify
 ```
 
-Las pruebas utilizan:
+Las pruebas cubren principalmente:
 
-- JWT firmados localmente;
-- servidores HTTP de dominio simulados;
-- configuración de seguridad local para pruebas.
+- configuración de seguridad;
+- JWT;
+- scopes;
+- roles;
+- autorización de endpoints;
+- contratos de órdenes;
+- validación de solicitudes;
+- comunicación simulada con los servicios de dominio.
 
-No requieren:
-
-- credenciales reales de Entra ID;
-- credenciales Oracle.
-
-Se verificó con `mvnw verify` que la extensión del contrato de órdenes para incluir repuestos no rompe las pruebas automatizadas existentes.
-
-También se comprobó que el BFF puede:
-
-- recibir repuestos en una solicitud de cambio de estado;
-- validar sus identificadores y cantidades;
-- transmitirlos hacia Workorders;
-- recibir los repuestos incluidos en la respuesta de una orden.
-
-Las pruebas actuales no representan todavía una prueba HTTP completa entre:
-
-```text
-BFF
-→ Workorders
-→ Catalog
-→ Oracle
-```
-
-Esa comprobación debe realizarse durante la prueba integrada del sistema.
-
-## Despliegue
-
-El BFF es el punto de entrada del backend después de API Gateway.
-
-El flujo esperado es:
+Las pruebas automatizadas no reemplazan la prueba integrada real entre:
 
 ```text
 Frontend
-    ↓
-API Gateway
-    ↓
-BFF
-    ├──→ Workorders
-    │       ↓
-    │     Catalog
-    │
-    └──→ Catalog
+→ API Gateway
+→ BFF
+→ Workorders / Catalog
+→ Oracle RDS
 ```
 
-Los microservicios de dominio deben mantenerse dentro de la infraestructura interna y no exponerse directamente a Internet.
+Ese flujo también se verifica durante las pruebas funcionales del sistema.
 
-La configuración definitiva de:
+## Docker
 
-- puertos;
-- direcciones internas;
-- contenedores;
-- API Gateway;
-- CORS;
-- JWT;
-- conectividad entre servicios;
+El BFF se construye mediante su `Dockerfile`.
 
-se administra y verifica junto con el repositorio:
+El despliegue conjunto se administra desde:
 
 ```text
-digitalfix-infra
+digitalfix-infra/docker-compose.yml
 ```
 
-El endpoint:
+El Compose central inicia:
 
-```http
-GET /healthz
+```text
+BFF
+Catalog
+Workorders
 ```
 
-se utiliza para comprobación de salud del BFF y no contiene información de negocio.
+Solo el BFF publica su puerto hacia el host.
 
-No debe publicarse como una ruta de negocio en API Gateway.
+Catalog y Workorders permanecen como servicios internos dentro de la red Docker.
+
+## Despliegue actual
+
+El flujo desplegado utilizado por DigitalFix es:
+
+```text
+Angular
+   ↓
+AWS API Gateway
+   ↓
+BFF en EC2
+   ├──→ Catalog
+   └──→ Workorders
+            ↓
+          Catalog
+   ↓
+Oracle Database en Amazon RDS
+```
+
+API Gateway funciona como punto de entrada externo.
+
+El BFF mantiene la validación de JWT, scopes y roles antes de ejecutar las operaciones de negocio.
+
+## Manejo de errores
+
+El BFF utiliza respuestas HTTP para representar los principales errores:
+
+```text
+400 Bad Request
+401 Unauthorized
+403 Forbidden
+404 Not Found
+409 Conflict
+502 Bad Gateway
+503 Service Unavailable
+```
+
+Los errores provenientes de los microservicios son traducidos o propagados según la operación correspondiente.
+
+## Estructura principal
+
+El proyecto está organizado por responsabilidad:
+
+```text
+controller
+service
+client
+dto
+config
+exception
+```
+
+Los controllers reciben las solicitudes HTTP.
+
+Los services aplican reglas y coordinación.
+
+Los clients realizan la comunicación con Catalog y Workorders.
+
+Los DTOs representan solicitudes y respuestas.
+
+La configuración de seguridad y clientes se mantiene dentro de `config`.
+
+## Estado actual
+
+Actualmente se encuentra funcionando la integración:
+
+```text
+Frontend
+→ API Gateway
+→ BFF
+→ Catalog / Workorders
+→ Oracle RDS
+```
+
+Se encuentran operativos:
+
+- validación JWT con Microsoft Entra ID;
+- autorización mediante scope y roles;
+- identificación mediante `oid`;
+- filtrado de órdenes del cliente;
+- CRUD de órdenes;
+- cambios de estado;
+- asociación de repuestos;
+- CRUD de servicios;
+- CRUD de repuestos;
+- comunicación BFF → Catalog;
+- comunicación BFF → Workorders;
+- propagación del Bearer token;
+- integración con el despliegue Docker en EC2.
 
 ## Documentación adicional
 
-`DEPLOYMENT.md` contiene documentación histórica y técnica relacionada con despliegue, Entra ID, API Gateway y contratos.
+Los archivos:
 
-`VERIFICATION.md` conserva registros de verificaciones realizadas anteriormente y no debe considerarse automáticamente como representación del estado actual del sistema.
+```text
+DEPLOYMENT.md
+VERIFICATION.md
+REFACTOR.md
+REFACTOR_LOMBOK.md
+```
+
+conservan información técnica e histórica del desarrollo.
+
+El `README.md` representa el estado funcional actual del BFF.
 
 ## Flujo de trabajo
 
-Los cambios deben integrarse mediante ramas y Pull Requests antes de incorporarse a `main`.
+Los cambios se desarrollan en ramas y se integran a `main` mediante Pull Request.
 
-## Refactor por capas (5 de octubre de 2026)
-
-`ControladorOrdenes` / `ControladorCatalogo` delegan en `ServicioOrdenes` /
-`ServicioCatalogo`, y estos utilizan `ClienteOrdenes` / `ClienteCatalogo`.
-Los DTOs están en `dto/request` y `dto/response`; la configuración técnica está
-en `config/security` y `config/client`, y los errores en `exception`.
-
-**Configuración efectiva:** el único Compose está en `../digitalfix-infra/docker-compose.yml`. Configura `digitalfix.catalog-url` y `digitalfix.workorders-url` mediante `DIGITALFIX_CATALOG_URL=http://catalog:8081` y `DIGITALFIX_WORKORDERS_URL=http://workorders:8082`. El Dockerfile compila desde el código fuente con Java 21; no requiere un JAR previo en el host. El BFF no necesita credenciales de Oracle. Consulta el README de infraestructura para desplegar los tres servicios.
-
-[REFACTOR.md](REFACTOR.md) contiene el inventario integrado, contratos conservados,
-archivos creados/movidos/renombrados, verificación con Java 21 y deuda técnica.
-Notify, Audit y Report permanecen documentales y fuera del flujo activo.
-
-
-## Convención técnica y Lombok (9 de octubre de 2026)
-
-Se aplica dominio en español + sufijo técnico en inglés: Controller, Service,
-Repository, Client, Request, Response, Config, Mapper y Exception. Los DTOs record
-se conservan; Lombok reemplaza únicamente código repetitivo de clases mutables
-y constructores simples. Los contratos y la configuración existentes se preservan.
-
-[REFACTOR_LOMBOK.md](REFACTOR_LOMBOK.md) contiene el inventario de renombrados,
-las decisiones de compatibilidad, resultados de Maven con Java 21 y deuda técnica.
-Los nombres que aparecen en secciones anteriores corresponden a etapas previas.
+La rama `main` representa la versión estable utilizada para la entrega.

@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.ContactosRequest;
+import jakarta.validation.Valid;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.bff.dto.response.OrdenResponse;
 import cl.digitalfix.bff.service.OrdenService;
@@ -32,7 +34,7 @@ public class OrdenController {
 
     @PostMapping("/workorders")
     @ResponseStatus(HttpStatus.CREATED)
-    public OrdenResponse crear(@RequestBody NuevaOrdenRequest solicitud, @AuthenticationPrincipal Jwt jwt) {
+    public OrdenResponse crear(@Valid @RequestBody NuevaOrdenRequest solicitud, @AuthenticationPrincipal Jwt jwt) {
         return servicios.crearOrden(solicitud, jwt);
     }
 
@@ -43,7 +45,7 @@ public class OrdenController {
     }
 
     @PutMapping("/workorders/{id}/status")
-    public OrdenResponse cambiarEstado(@PathVariable Long id, @RequestBody CambioEstadoRequest solicitud,
+    public OrdenResponse cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoRequest solicitud,
             @AuthenticationPrincipal Jwt jwt) {
         return servicios.cambiarEstado(id, solicitud, jwt);
     }
@@ -52,5 +54,11 @@ public class OrdenController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void eliminar(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         servicios.eliminarOrden(id, jwt);
+    }
+
+    @PatchMapping("/workorders/{id}/contactos")
+    public OrdenResponse contactos(@PathVariable Long id, @Valid @RequestBody ContactosRequest solicitud,
+            @AuthenticationPrincipal Jwt jwt) {
+        return servicios.actualizarContactos(id, solicitud, jwt);
     }
 }

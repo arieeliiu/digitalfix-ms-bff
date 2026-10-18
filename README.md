@@ -647,6 +647,25 @@ El `README.md` representa el estado funcional actual del BFF.
 
 ## Flujo de trabajo
 
+## Evaluación 2: contactos de órdenes
+
+La creación acepta `emailContacto` y el cambio de estado acepta `emailTecnico`,
+ambos opcionales, con formato de correo y máximo 254 caracteres. Las respuestas
+conservan ambos campos, que pueden ser `null`. La identidad sigue siendo el `oid`
+del JWT; un identificador enviado por el cliente no sustituye al usuario autenticado.
+
+`PATCH /api/workorders/{id}/contactos` reenvía el Bearer token a Workorders.
+Requiere scope `access_as_user` y rol Cliente, Operador o Admin. El propietario
+puede modificar `emailContacto`; Admin/Operador pueden modificar ambos correos.
+Propiedades omitidas o `null` mantienen el valor; `""` permite borrarlo.
+También sirve para órdenes cerradas: no cambia estado ni stock y no reenvía
+automáticamente comandos que antes se omitieron por falta de destinatario.
+
+Validación local del Paso 6: `./mvnw.cmd -B verify`, 65 pruebas aprobadas,
+incluyendo JWT firmados localmente y servidores HTTP simulados. Esto no certifica
+Oracle, Entra, SMTP ni AWS reales. API Gateway debe permitir la ruta PATCH y CORS;
+ver las instrucciones de integración en `digitalfix-infra` antes del despliegue.
+
 Los cambios se desarrollan en ramas y se integran a `main` mediante Pull Request.
 
 La rama `main` representa la versión estable utilizada para la entrega.

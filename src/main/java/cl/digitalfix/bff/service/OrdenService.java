@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.bff.client.OrdenClient;
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.ContactosRequest;
 import cl.digitalfix.bff.dto.request.CrearOrdenDominioRequest;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.bff.dto.response.OrdenResponse;
@@ -83,7 +84,8 @@ public class OrdenService {
                 solicitud.servicioId(),
                 solicitud.descripcion().trim(),
                 solicitud.direccion().trim(),
-                solicitante);
+                solicitante,
+                solicitud.emailContacto());
 
         var orden = ordenes.crear(interna, jwt);
 
@@ -180,6 +182,16 @@ public class OrdenService {
         consultarOrden(id, jwt);
 
         ordenes.eliminar(id, identidad(jwt), jwt);
+    }
+
+    public OrdenResponse actualizarContactos(Long id, ContactosRequest solicitud, Jwt jwt) {
+        identidad(jwt);
+        consultarOrden(id, jwt);
+        if (!puedeGestionarOrdenes(jwt) && solicitud.emailTecnico() != null)
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El correo del técnico requiere gestión de órdenes");
+        var orden = ordenes.actualizarContactos(id, solicitud, jwt);
+        if (orden == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Orden sin respuesta");
+        return orden;
     }
 
     private void validarSolicitud(

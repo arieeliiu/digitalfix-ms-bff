@@ -4,5 +4,6 @@ public record CrearOrdenDominioRequest(
         Long servicioId,
         String descripcion,
         String direccion,
-        String solicitanteId
+        String solicitanteId,
+        String emailContacto
 ) {}

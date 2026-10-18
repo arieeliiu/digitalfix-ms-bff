@@ -63,7 +63,8 @@ class SeguridadBffTests {
     private static final AtomicReference<String> RESPUESTA_REPUESTOS = new AtomicReference<>(REPUESTOS);
     private static final String ORDEN = """
         {"id":1,"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123",
-         "solicitanteId":"usuario-prueba","estado":"CREADA","fechaCreacion":"2026-09-15T00:00:00Z"}
+         "solicitanteId":"usuario-prueba","estado":"CREADA","fechaCreacion":"2026-09-15T00:00:00Z",
+         "emailContacto":"cliente@example.org","emailTecnico":null}
         """;
 
     private static final RSAKey CLAVE = generarClave();
@@ -493,6 +494,74 @@ class SeguridadBffTests {
         }
     }
 
+    @Test
+    void correosViajanSinAceptarIdentidadDelCliente() throws Exception {
+        cliente.perform(post("/api/workorders").header("Authorization","Bearer "+crearToken("Cliente"))
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"servicioId":1,"descripcion":"Revisión","direccion":"Calle","emailContacto":"cliente@example.org","solicitanteId":"impostor"}
+                """))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.emailContacto").value("cliente@example.org"))
+                .andExpect(jsonPath("$.emailTecnico").value(org.hamcrest.Matchers.nullValue()));
+        assertTrue(CUERPO_INTERNO.get().contains("cliente@example.org"));
+        assertFalse(CUERPO_INTERNO.get().contains("impostor"));
+        cliente.perform(put("/api/workorders/1/status").header("Authorization","Bearer "+crearToken("Operador"))
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                {"status":"ASIGNADA","tecnicoId":"t1","emailTecnico":"tecnico@example.org","repuestos":[]}
+                """))
+                .andExpect(status().isOk());
+        assertTrue(CUERPO_INTERNO.get().contains("tecnico@example.org"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"sin_token,401", "sin_scope,403", "sin_rol,403", "sin_oid,403", "Cliente,200", "Operador,200", "Admin,200"})
+    void contactosTienenReglaExplicitaDeSeguridad(String caso, int codigo) throws Exception {
+        var solicitud=request(HttpMethod.PATCH,"/api/workorders/1/contactos")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"emailContacto\":\"nuevo@example.org\",\"actorId\":\"impostor\"}");
+        String token=caso.equals("sin_token") ? null : crearToken(caso);
+        if (token!=null) solicitud.header("Authorization","Bearer "+token);
+        cliente.perform(solicitud).andExpect(status().is(codigo));
+        if (codigo==200) {
+            assertEquals("PATCH",METODO_INTERNO.get()); assertNull(FILTRO_INTERNO.get());
+            assertEquals("Bearer "+token,TOKEN_INTERNO.get());
+            assertFalse(CUERPO_INTERNO.get().contains("impostor"));
+        }
+    }
+
+    @Test
+    void contactosRespetanPropiedadTecnicoYLimpiar() throws Exception {
+        cliente.perform(request(HttpMethod.PATCH,"/api/workorders/2/contactos")
+                .header("Authorization","Bearer "+crearToken("Cliente"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"emailContacto\":\"x@example.org\"}"))
+                .andExpect(status().isNotFound());
+        cliente.perform(request(HttpMethod.PATCH,"/api/workorders/1/contactos")
+                .header("Authorization","Bearer "+crearToken("Cliente"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"emailTecnico\":\"\"}"))
+                .andExpect(status().isForbidden());
+        cliente.perform(request(HttpMethod.PATCH,"/api/workorders/2/contactos")
+                .header("Authorization","Bearer "+crearToken("Admin"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"emailTecnico\":\"\"}"))
+                .andExpect(status().isOk());
+        var body=tools.jackson.databind.json.JsonMapper.builder().build().readTree(CUERPO_INTERNO.get());
+        assertEquals("",body.get("emailTecnico").asText());
+        assertTrue(body.get("emailContacto").isNull());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings={"no-es-correo", "a@", "demasiado-largo"})
+    void rechazaCorreosInvalidosEnLosTresFlujos(String valor) throws Exception {
+        if (valor.equals("demasiado-largo")) valor="a".repeat(250)+"@example.org";
+        String token=crearToken("Admin");
+        cliente.perform(post("/api/workorders").header("Authorization","Bearer "+token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"servicioId\":1,\"descripcion\":\"R\",\"direccion\":\"C\",\"emailContacto\":\""+valor+"\"}"))
+                .andExpect(status().isBadRequest());
+        cliente.perform(put("/api/workorders/1/status").header("Authorization","Bearer "+token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ASIGNADA\",\"emailTecnico\":\""+valor+"\"}"))
+                .andExpect(status().isBadRequest());
+        cliente.perform(request(HttpMethod.PATCH,"/api/workorders/1/contactos").header("Authorization","Bearer "+token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"emailContacto\":\""+valor+"\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
     private static RSAKey generarClave() {
         try {
             return new RSAKeyGenerator(2048)
@@ -559,6 +628,10 @@ class SeguridadBffTests {
                     CREACIONES.incrementAndGet();
                     CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                     respuesta = ORDEN; status = 201;
+                } else if (intercambio.getRequestMethod().equals("PATCH")) {
+                    FILTRO_INTERNO.set(intercambio.getRequestURI().getQuery());
+                    CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                    respuesta = ORDEN;
                 } else if (intercambio.getRequestMethod().equals("PUT")) {
                     FILTRO_INTERNO.set(intercambio.getRequestURI().getQuery());
                     CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));

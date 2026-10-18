@@ -44,6 +44,8 @@ public class SecurityConfig {
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers(HttpMethod.PUT, "/api/workorders/*/status")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador")))
+                .requestMatchers(HttpMethod.PATCH, "/api/workorders/*/contactos")
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers(HttpMethod.PUT, "/api/workorders/*")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers(HttpMethod.DELETE, "/api/workorders/*")

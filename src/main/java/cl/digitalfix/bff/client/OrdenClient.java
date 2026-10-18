@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.ContactosRequest;
 import cl.digitalfix.bff.dto.request.CrearOrdenDominioRequest;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
 import cl.digitalfix.bff.dto.response.OrdenResponse;
@@ -47,7 +48,9 @@ public class OrdenClient {
         return cliente.put().uri(uri -> uri.path("/api/workorders/{id}")
                         .queryParam("solicitanteId", actor).build(id))
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
-                .body(solicitud).retrieve().body(OrdenResponse.class);
+                .body(java.util.Map.of("servicioId", solicitud.servicioId(),
+                        "descripcion", solicitud.descripcion(), "direccion", solicitud.direccion()))
+                .retrieve().body(OrdenResponse.class);
     }
 
     public OrdenResponse cambiarEstado(Long id, String actor, CambioEstadoRequest solicitud, Jwt jwt) {
@@ -62,5 +65,11 @@ public class OrdenClient {
                         .queryParam("solicitanteId", actor).build(id))
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
                 .retrieve().toBodilessEntity();
+    }
+
+    public OrdenResponse actualizarContactos(Long id, ContactosRequest solicitud, Jwt jwt) {
+        return cliente.patch().uri("/api/workorders/{id}/contactos", id)
+                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                .body(solicitud).retrieve().body(OrdenResponse.class);
     }
 }

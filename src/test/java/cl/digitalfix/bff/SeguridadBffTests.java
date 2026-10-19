@@ -329,7 +329,7 @@ class SeguridadBffTests {
                     """))
                 .andExpect(status().isOk());
         assertEquals("Bearer " + token, TOKEN_INTERNO.get());
-        assertEquals("solicitanteId=usuario-prueba", FILTRO_INTERNO.get());
+        assertNull(FILTRO_INTERNO.get());
         assertTrue(CUERPO_INTERNO.get().contains("\"descripcion\":\"Revisión\""));
         assertTrue(CUERPO_INTERNO.get().contains("\"direccion\":\"Calle 123\""));
 
@@ -337,7 +337,38 @@ class SeguridadBffTests {
                 .andExpect(status().isNoContent());
         assertEquals("DELETE", METODO_INTERNO.get());
         assertEquals("Bearer " + token, TOKEN_INTERNO.get());
-        assertEquals("solicitanteId=usuario-prueba", FILTRO_INTERNO.get());
+        assertNull(FILTRO_INTERNO.get());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"Admin,200,204", "Operador,404,404", "Cliente,404,404", "sin_oid,403,403", "sin_rol,403,403", "sin_scope,403,403"})
+    void soloAdminModificaOrdenAjenaSinSuplantarPropietario(String rol, int edicion, int eliminacion) throws Exception {
+        String token = crearToken(rol);
+        cliente.perform(put("/api/workorders/2").param("solicitanteId", "otra-persona").param("rol", "Admin")
+                .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"servicioId\":1,\"descripcion\":\"Cambio\",\"direccion\":\"Calle\",\"roles\":[\"Admin\"]}"))
+                .andExpect(status().is(edicion));
+        if (edicion == 200) {
+            assertNull(FILTRO_INTERNO.get());
+            assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+            assertFalse(CUERPO_INTERNO.get().contains("roles"));
+        }
+        cliente.perform(delete("/api/workorders/2").param("solicitanteId", "otra-persona").param("admin", "true")
+                .header("Authorization", "Bearer " + token)).andExpect(status().is(eliminacion));
+        if (eliminacion == 204) assertNull(FILTRO_INTERNO.get());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Admin", "Operador", "Cliente"})
+    void estadosRestringenEdicionYEliminacionParaTodos(String rol) throws Exception {
+        String token = crearToken(rol);
+        for (int id = 3; id <= 7; id++) {
+            cliente.perform(put("/api/workorders/" + id).header("Authorization", "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"servicioId\":1,\"descripcion\":\"Cambio\",\"direccion\":\"Calle\"}"))
+                    .andExpect(status().isConflict());
+            cliente.perform(delete("/api/workorders/" + id).header("Authorization", "Bearer " + token))
+                    .andExpect(status().is(id == 4 ? 204 : 409));
+        }
     }
 
     @Test
@@ -647,6 +678,15 @@ class SeguridadBffTests {
                     respuesta = "[" + ORDEN + "," + ORDEN.replace("usuario-prueba", "otra-persona") + "]";
                 } else if (ruta.endsWith("/2")) {
                     respuesta = ORDEN.replace("usuario-prueba", "otra-persona");
+                } else if (ruta.matches("/api/workorders/[3-7]")) {
+                    String estado = switch (ruta.charAt(ruta.length() - 1)) {
+                        case '3' -> "CERRADA";
+                        case '4' -> "CANCELADA";
+                        case '5' -> "ASIGNADA";
+                        case '6' -> "EN_DESPLAZAMIENTO";
+                        default -> "EN_EJECUCION";
+                    };
+                    respuesta = ORDEN.replace("CREADA", estado);
                 } else if (ruta.endsWith("/404")) {
                     respuesta = "{}"; status = 404;
                 } else if (ruta.endsWith("/500")) {

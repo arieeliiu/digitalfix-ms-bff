@@ -103,10 +103,10 @@ public class OrdenService {
             NuevaOrdenRequest solicitud,
             Jwt jwt) {
 
-        consultarOrden(id, jwt);
+        validarModificacion(id, jwt, List.of("CREADA"));
         validarSolicitud(solicitud, jwt);
 
-        var orden = ordenes.actualizar(id, identidad(jwt), new NuevaOrdenRequest(
+        var orden = ordenes.actualizar(id, new NuevaOrdenRequest(
                         solicitud.servicioId(),
                         solicitud.descripcion().trim(),
                         solicitud.direccion().trim()), jwt);
@@ -179,9 +179,19 @@ public class OrdenService {
 
     public void eliminarOrden(Long id, Jwt jwt) {
 
-        consultarOrden(id, jwt);
+        validarModificacion(id, jwt, List.of("CREADA", "CANCELADA"));
 
-        ordenes.eliminar(id, identidad(jwt), jwt);
+        ordenes.eliminar(id, jwt);
+    }
+
+    private void validarModificacion(Long id, Jwt jwt, List<String> estados) {
+        String actor = identidad(jwt);
+        var orden = consultarOrden(id, jwt);
+        var roles = jwt.getClaimAsStringList("roles");
+        if ((roles == null || !roles.contains("Admin")) && !actor.equals(orden.solicitanteId()))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Orden no encontrada");
+        if (!estados.contains(orden.estado()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El estado de la orden no permite esta operación");
     }
 
     public OrdenResponse actualizarContactos(Long id, ContactosRequest solicitud, Jwt jwt) {

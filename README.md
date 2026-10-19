@@ -649,6 +649,19 @@ El `README.md` representa el estado funcional actual del BFF.
 
 ## Evaluación 2: contactos de órdenes
 
+### Ajuste de edición y permisos (19/10/2026)
+
+PUT de órdenes permite editar CREADA; DELETE permite CREADA/CANCELADA. Solo Admin
+puede operar sobre órdenes ajenas. Cliente y Operador conservan el requisito de
+propiedad. BFF valida el `oid` y el rol del JWT y reenvía el Bearer a Workorders,
+sin parámetros de identidad para estas dos operaciones. Workorders vuelve a autorizar
+y verifica el estado bajo bloqueo transaccional. No se cambian permisos de contactos
+ni transiciones. Actualizar Workorders antes de esta versión del BFF: el contrato
+anterior de Workorders exigía el parámetro `solicitanteId` en PUT/DELETE.
+
+Validación del ajuste: `./mvnw.cmd -B verify`, 74 pruebas aprobadas. Incluye JWT
+firmados localmente, intentos de suplantación por parámetros, permisos y estados.
+
 La creación acepta `emailContacto` y el cambio de estado acepta `emailTecnico`,
 ambos opcionales, con formato de correo y máximo 254 caracteres. Las respuestas
 conservan ambos campos, que pueden ser `null`. La identidad sigue siendo el `oid`

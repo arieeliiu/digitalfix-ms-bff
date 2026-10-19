@@ -44,9 +44,8 @@ public class OrdenClient {
                 .body(solicitud).retrieve().body(OrdenResponse.class);
     }
 
-    public OrdenResponse actualizar(Long id, String actor, NuevaOrdenRequest solicitud, Jwt jwt) {
-        return cliente.put().uri(uri -> uri.path("/api/workorders/{id}")
-                        .queryParam("solicitanteId", actor).build(id))
+    public OrdenResponse actualizar(Long id, NuevaOrdenRequest solicitud, Jwt jwt) {
+        return cliente.put().uri("/api/workorders/{id}", id)
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
                 .body(java.util.Map.of("servicioId", solicitud.servicioId(),
                         "descripcion", solicitud.descripcion(), "direccion", solicitud.direccion()))
@@ -60,9 +59,8 @@ public class OrdenClient {
                 .body(solicitud).retrieve().body(OrdenResponse.class);
     }
 
-    public void eliminar(Long id, String actor, Jwt jwt) {
-        cliente.delete().uri(uri -> uri.path("/api/workorders/{id}")
-                        .queryParam("solicitanteId", actor).build(id))
+    public void eliminar(Long id, Jwt jwt) {
+        cliente.delete().uri("/api/workorders/{id}", id)
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
                 .retrieve().toBodilessEntity();
     }

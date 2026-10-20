@@ -253,7 +253,7 @@ class SeguridadBffTests {
         String token = crearToken("Cliente");
         cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + token)
             .contentType(MediaType.APPLICATION_JSON).content("""
-                {"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123","solicitanteId":"otra-persona"}
+                {"servicioId":1,"descripcion":"Revisión","direccion":"Calle 123","solicitanteId":"otra-persona","emailContacto":"cliente@example.org"}
                 """))
             .andExpect(status().isCreated()).andExpect(jsonPath("$.solicitanteId").value("usuario-prueba"));
         assertTrue(CUERPO_INTERNO.get().contains("usuario-prueba"));
@@ -296,7 +296,7 @@ class SeguridadBffTests {
         int antes = CREACIONES.get();
         cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + crearToken("Cliente"))
             .contentType(MediaType.APPLICATION_JSON).content("""
-                {"servicioId":999,"descripcion":"Revisión","direccion":"Calle 123"}
+                {"servicioId":999,"descripcion":"Revisión","direccion":"Calle 123","emailContacto":"cliente@example.org"}
                 """))
             .andExpect(status().isBadRequest());
         assertEquals(antes, CREACIONES.get());
@@ -374,7 +374,7 @@ class SeguridadBffTests {
     @Test
     void cambioEstadoMantieneRolesPayloadYBearer() throws Exception {
         String cuerpo = """
-            {"status":"ASIGNADA","tecnicoId":"tecnico-1","repuestos":[{"repuestoId":4,"cantidad":2}]}
+            {"status":"ASIGNADA","tecnicoId":"tecnico-1","emailTecnico":"tecnico@example.org","repuestos":[{"repuestoId":4,"cantidad":2}]}
             """;
         cliente.perform(put("/api/workorders/1/status")
                 .header("Authorization", "Bearer " + crearToken("Cliente"))
@@ -396,7 +396,7 @@ class SeguridadBffTests {
     void conservarDetalleDeValidacionYOrdenDeComprobaciones() throws Exception {
         String token = crearToken("Cliente");
         cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"emailContacto\":\"cliente@example.org\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("Servicio, descripción y dirección válidos son obligatorios"));
         cliente.perform(put("/api/workorders/2").header("Authorization", "Bearer " + token)
@@ -574,7 +574,7 @@ class SeguridadBffTests {
                 .andExpect(status().isOk());
         var body=tools.jackson.databind.json.JsonMapper.builder().build().readTree(CUERPO_INTERNO.get());
         assertEquals("",body.get("emailTecnico").asText());
-        assertTrue(body.get("emailContacto").isNull());
+        assertFalse(body.has("emailContacto"));
     }
 
     @ParameterizedTest
@@ -591,6 +591,30 @@ class SeguridadBffTests {
         cliente.perform(request(HttpMethod.PATCH,"/api/workorders/1/contactos").header("Authorization","Bearer "+token)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"emailContacto\":\""+valor+"\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void correosObligatoriosYOmisionDeContactosConservanContrato() throws Exception {
+        String token = crearToken("Admin");
+        for (String valor : List.of("omitido", "null", "\"\"", "\"   \"")) {
+            String contacto = valor.equals("omitido") ? "" : ",\"emailContacto\":" + valor;
+            cliente.perform(post("/api/workorders").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"servicioId\":1,\"descripcion\":\"R\",\"direccion\":\"C\"" + contacto + "}"))
+                    .andExpect(status().isBadRequest());
+            String tecnico = valor.equals("omitido") ? "" : ",\"emailTecnico\":" + valor;
+            cliente.perform(put("/api/workorders/1/status").header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"status\":\"ASIGNADA\",\"tecnicoId\":\"t\"" + tecnico + "}"))
+                    .andExpect(status().isBadRequest());
+            if (!valor.equals("omitido"))
+                cliente.perform(request(HttpMethod.PATCH, "/api/workorders/1/contactos").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"emailContacto\":" + valor + "}"))
+                        .andExpect(status().isBadRequest());
+        }
+        cliente.perform(request(HttpMethod.PATCH, "/api/workorders/1/contactos").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("{}" )).andExpect(status().isOk());
+        assertEquals("{}", CUERPO_INTERNO.get());
+        cliente.perform(put("/api/workorders/5/status").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ASIGNADA\"}")).andExpect(status().isOk());
     }
 
     private static RSAKey generarClave() {

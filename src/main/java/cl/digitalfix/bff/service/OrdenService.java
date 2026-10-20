@@ -104,7 +104,7 @@ public class OrdenService {
             NuevaOrdenRequest solicitud,
             Jwt jwt) {
 
-        validarModificacion(id, jwt, List.of("CREADA"));
+        validarEdicion(id, jwt);
         validarSolicitud(solicitud, jwt);
 
         var orden = ordenes.actualizar(id, new NuevaOrdenRequest(
@@ -200,6 +200,21 @@ public class OrdenService {
         validarModificacion(id, jwt, List.of("CREADA", "CANCELADA"));
 
         ordenes.eliminar(id, jwt);
+    }
+
+    // Órdenes activas: gestores editan los datos generales; CREADA mantiene el control de propietario/Admin.
+    private void validarEdicion(Long id, Jwt jwt) {
+        var orden = consultarOrden(id, jwt);
+        if ("CREADA".equals(orden.estado())) {
+            validarModificacion(id, jwt, List.of("CREADA"));
+            return;
+        }
+        if (!List.of("ASIGNADA", "EN_DESPLAZAMIENTO", "EN_EJECUCION").contains(orden.estado()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Solo se pueden editar órdenes activas");
+        if (!puedeGestionarOrdenes(jwt))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo Admin u Operador pueden editar órdenes asignadas");
     }
 
     private void validarModificacion(Long id, Jwt jwt, List<String> estados) {

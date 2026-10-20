@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.bff.client.OrdenClient;
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.ActualizarRepuestosRequest;
 import cl.digitalfix.bff.dto.request.ContactosRequest;
 import cl.digitalfix.bff.dto.request.CrearOrdenDominioRequest;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
@@ -103,7 +104,7 @@ public class OrdenService {
             NuevaOrdenRequest solicitud,
             Jwt jwt) {
 
-        validarModificacion(id, jwt, List.of("CREADA"));
+        validarEdicion(id, jwt);
         validarSolicitud(solicitud, jwt);
 
         var orden = ordenes.actualizar(id, new NuevaOrdenRequest(
@@ -180,11 +181,40 @@ public class OrdenService {
         return orden;
     }
 
+    public OrdenResponse actualizarRepuestos(Long id, ActualizarRepuestosRequest solicitud, Jwt jwt) {
+        identidad(jwt);
+        if (!puedeGestionarOrdenes(jwt))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "La gestión de repuestos requiere rol Admin u Operador");
+        var orden = consultarOrden(id, jwt);
+        if (!List.of("ASIGNADA", "EN_DESPLAZAMIENTO", "EN_EJECUCION").contains(orden.estado()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La orden no admite cambios de repuestos");
+        var resultado = ordenes.actualizarRepuestos(id, solicitud, jwt);
+        if (resultado == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY);
+        return resultado;
+    }
+
     public void eliminarOrden(Long id, Jwt jwt) {
 
         validarModificacion(id, jwt, List.of("CREADA", "CANCELADA"));
 
         ordenes.eliminar(id, jwt);
+    }
+
+    // Órdenes activas: gestores editan los datos generales; CREADA mantiene el control de propietario/Admin.
+    private void validarEdicion(Long id, Jwt jwt) {
+        var orden = consultarOrden(id, jwt);
+        if ("CREADA".equals(orden.estado())) {
+            validarModificacion(id, jwt, List.of("CREADA"));
+            return;
+        }
+        if (!List.of("ASIGNADA", "EN_DESPLAZAMIENTO", "EN_EJECUCION").contains(orden.estado()))
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Solo se pueden editar órdenes activas");
+        if (!puedeGestionarOrdenes(jwt))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Solo Admin u Operador pueden editar órdenes asignadas");
     }
 
     private void validarModificacion(Long id, Jwt jwt, List<String> estados) {

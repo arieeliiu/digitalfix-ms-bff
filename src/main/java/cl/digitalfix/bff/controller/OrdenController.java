@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import lombok.RequiredArgsConstructor;
 
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.ActualizarRepuestosRequest;
 import cl.digitalfix.bff.dto.request.ContactosRequest;
 import jakarta.validation.Valid;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
@@ -54,6 +55,13 @@ public class OrdenController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void eliminar(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         servicios.eliminarOrden(id, jwt);
+    }
+
+    @PutMapping("/workorders/{id}/repuestos")
+    public OrdenResponse actualizarRepuestos(@PathVariable Long id,
+            @Valid @RequestBody ActualizarRepuestosRequest solicitud,
+            @AuthenticationPrincipal Jwt jwt) {
+        return servicios.actualizarRepuestos(id, solicitud, jwt);
     }
 
     @PatchMapping("/workorders/{id}/contactos")

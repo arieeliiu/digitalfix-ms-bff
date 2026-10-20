@@ -125,7 +125,10 @@ public class OrdenService {
             CambioEstadoRequest solicitud,
             Jwt jwt) {
 
-        consultarOrden(id, jwt);
+        var actual = consultarOrden(id, jwt);
+        if ("CREADA".equals(actual.estado()) && "ASIGNADA".equals(solicitud.status())
+                && (solicitud.emailTecnico() == null || solicitud.emailTecnico().isBlank()))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El correo del técnico es obligatorio al asignar");
 
         boolean estadoInvalido =
                 solicitud.status() == null
@@ -196,9 +199,11 @@ public class OrdenService {
 
     public OrdenResponse actualizarContactos(Long id, ContactosRequest solicitud, Jwt jwt) {
         identidad(jwt);
-        consultarOrden(id, jwt);
+        var actual = consultarOrden(id, jwt);
         if (!puedeGestionarOrdenes(jwt) && solicitud.emailTecnico() != null)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "El correo del técnico requiere gestión de órdenes");
+        if (actual.tecnicoId() != null && solicitud.emailTecnico() != null && solicitud.emailTecnico().isBlank())
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El correo del técnico asignado no puede borrarse");
         var orden = ordenes.actualizarContactos(id, solicitud, jwt);
         if (orden == null) throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Orden sin respuesta");
         return orden;

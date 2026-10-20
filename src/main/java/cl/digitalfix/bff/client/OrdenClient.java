@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import cl.digitalfix.bff.dto.request.CambioEstadoRequest;
+import cl.digitalfix.bff.dto.request.ActualizarRepuestosRequest;
 import cl.digitalfix.bff.dto.request.ContactosRequest;
 import cl.digitalfix.bff.dto.request.CrearOrdenDominioRequest;
 import cl.digitalfix.bff.dto.request.NuevaOrdenRequest;
@@ -55,6 +56,12 @@ public class OrdenClient {
     public OrdenResponse cambiarEstado(Long id, String actor, CambioEstadoRequest solicitud, Jwt jwt) {
         return cliente.put().uri(uri -> uri.path("/api/workorders/{id}/status")
                         .queryParam("solicitanteId", actor).build(id))
+                .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
+                .body(solicitud).retrieve().body(OrdenResponse.class);
+    }
+
+    public OrdenResponse actualizarRepuestos(Long id, ActualizarRepuestosRequest solicitud, Jwt jwt) {
+        return cliente.put().uri("/api/workorders/{id}/repuestos", id)
                 .headers(h -> h.setBearerAuth(jwt.getTokenValue()))
                 .body(solicitud).retrieve().body(OrdenResponse.class);
     }

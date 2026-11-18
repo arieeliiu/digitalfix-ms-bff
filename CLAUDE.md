@@ -6,7 +6,7 @@ Backend for Frontend: único punto de entrada detrás de AWS API Gateway. Valida
 propiedad, valida entradas y reenvía a Catalog (`http://catalog:8081`) y Workorders (`http://workorders:8082`)
 propagando el **mismo Bearer**. Puerto 8080. Sin base de datos.
 
-Clase principal: `BffApplication` (renombrada desde `DigitalfixMsBffApplication`, rename sin commitear).
+Clase principal: `BffApplication` (renombrada desde `DigitalfixMsBffApplication`).
 
 ## Mapa del código (`cl.digitalfix.bff`)
 
@@ -41,10 +41,10 @@ Al agregar un endpoint: DTO en `dto/request|response` (record) → método en el
 
 ## Configuración
 
-`application.properties` trae URLs internas, `issuer-uri` y `audiences` de Entra. En Docker se sobrescriben con
+`application.properties` trae URLs locales por defecto (`http://localhost:8081` y `http://localhost:8082`), `issuer-uri` y `audiences` de Entra. En Docker las URLs se sobrescriben con
 `DIGITALFIX_CATALOG_URL` y `DIGITALFIX_WORKORDERS_URL`. No cambies issuer ni audience sin coordinarlo con el frontend y los otros servicios.
 
-Al correrlo local: `DIGITALFIX_CATALOG_URL=http://localhost:8081` y `DIGITALFIX_WORKORDERS_URL=http://localhost:8082`. El BFF **no** tiene CORS: en local el frontend entra por el proxy de `ng serve` (mismo origen) y en AWS lo resuelve API Gateway. No agregues CORS al BFF para resolver un problema local.
+Al correrlo local no hace falta ninguna variable. El BFF **no** tiene CORS: en local el frontend entra por el proxy de `ng serve` (mismo origen) y en AWS lo resuelve API Gateway. No agregues CORS al BFF para resolver un problema local.
 
 ## Tests
 

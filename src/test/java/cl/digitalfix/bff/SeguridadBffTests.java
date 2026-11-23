@@ -86,6 +86,7 @@ class SeguridadBffTests {
     static void configurarClaves(DynamicPropertyRegistry propiedades) {
         propiedades.add("digitalfix.catalog-url", () -> "http://127.0.0.1:" + SERVIDOR.getAddress().getPort());
         propiedades.add("digitalfix.workorders-url", () -> "http://127.0.0.1:" + SERVIDOR.getAddress().getPort());
+        propiedades.add("digitalfix.audit-url", () -> "http://127.0.0.1:" + SERVIDOR.getAddress().getPort());
         propiedades.add(
             "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
             () -> "http://127.0.0.1:" + SERVIDOR.getAddress().getPort() + "/claves"
@@ -151,6 +152,7 @@ class SeguridadBffTests {
             String rol = switch (caso) {
                 case "Operador" -> "Operador";
                 case "Cliente" -> "Cliente";
+                case "Auditor" -> "Auditor";
                 default -> "Admin";
             };
             claims.claim("roles", List.of(rol));
@@ -360,12 +362,12 @@ class SeguridadBffTests {
 
     @ParameterizedTest
     @ValueSource(strings = {"Admin", "Operador", "Cliente"})
-    void estadosRestringenEdicionYEliminacionParaTodos(String rol) throws Exception {
+    void estadosRestringenEdicionYEliminacionSegunRol(String rol) throws Exception {
         String token = crearToken(rol);
         for (int id = 3; id <= 7; id++) {
             cliente.perform(put("/api/workorders/" + id).header("Authorization", "Bearer " + token)
                     .contentType(MediaType.APPLICATION_JSON).content("{\"servicioId\":1,\"descripcion\":\"Cambio\",\"direccion\":\"Calle\"}"))
-                    .andExpect(status().isConflict());
+                    .andExpect(status().is(id <= 4 ? 409 : rol.equals("Cliente") ? 403 : 200));
             cliente.perform(delete("/api/workorders/" + id).header("Authorization", "Bearer " + token))
                     .andExpect(status().is(id == 4 ? 204 : 409));
         }
@@ -617,6 +619,32 @@ class SeguridadBffTests {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ASIGNADA\"}")).andExpect(status().isOk());
     }
 
+    @ParameterizedTest
+    @CsvSource({"sin_token,401", "Cliente,403", "Operador,403", "sin_scope,403", "Admin,200", "Auditor,200"})
+    void historialSoloParaAdminAuditor(String rol, int codigo) throws Exception {
+        String token = crearToken(rol);
+        var solicitud = get("/api/workorders/1/history");
+        if (!rol.equals("sin_token")) solicitud.header("Authorization", "Bearer " + token);
+        cliente.perform(solicitud).andExpect(status().is(codigo));
+        if (codigo == 200) {
+            assertEquals("Bearer " + token, TOKEN_INTERNO.get());
+            assertEquals("/api/audit/ordenes/1/timeline", RUTA_INTERNA.get());
+        }
+    }
+
+    @Test
+    void historialConservaContratoYControlaErrores() throws Exception {
+        String token = "Bearer " + crearToken("Auditor");
+        cliente.perform(get("/api/workorders/1/history").header("Authorization", token))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].actorId").value("usuario-prueba"))
+                .andExpect(jsonPath("$[0].kafkaTopico").value("workorders.events"));
+        cliente.perform(get("/api/workorders/2/history").header("Authorization", token))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        cliente.perform(get("/api/workorders/0/history").header("Authorization", token)).andExpect(status().isBadRequest());
+        cliente.perform(get("/api/workorders/500/history").header("Authorization", token)).andExpect(status().isBadGateway());
+        cliente.perform(get("/api/workorders/403/history").header("Authorization", token)).andExpect(status().isForbidden());
+    }
+
     private static RSAKey generarClave() {
         try {
             return new RSAKeyGenerator(2048)
@@ -652,7 +680,15 @@ class SeguridadBffTests {
                 if (ruta.startsWith("/api/catalog/")) CONSULTAS_CATALOGO.incrementAndGet();
                 String respuesta;
                 int status = 200;
-                if (ruta.startsWith("/api/catalog/") && !intercambio.getRequestMethod().equals("GET")) {
+                if (ruta.startsWith("/api/audit/")) {
+                    status = ruta.contains("/500/") ? 500 : ruta.contains("/403/") ? 403 : 200;
+                    respuesta = ruta.contains("/1/") ? """
+                        [{"eventId":"evento-1","tipo":"ORDEN_CREADA","ordenId":1,
+                          "accion":"CREACION","estadoNuevo":"CREADA","actorId":"usuario-prueba",
+                          "actorRoles":"Admin","fecha":"2026-11-23T00:00:00Z",
+                          "kafkaTopico":"workorders.events","kafkaParticion":1,"kafkaOffset":3}]
+                        """ : "[]";
+                } else if (ruta.startsWith("/api/catalog/") && !intercambio.getRequestMethod().equals("GET")) {
                     CUERPO_INTERNO.set(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                     status = ESTADO_ESCRITURA_CATALOGO.get();
                     if (status == 0) {

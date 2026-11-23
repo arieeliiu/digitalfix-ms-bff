@@ -12,6 +12,12 @@ import org.springframework.web.client.RestClient;
 @Configuration
 public class RestClientConfig {
     @Bean
+    RestClient auditRestClient(@Value("${digitalfix.audit-url}") String url,
+            JdkClientHttpRequestFactory dominioRequestFactory) {
+        return RestClient.builder().baseUrl(url).requestFactory(dominioRequestFactory).build();
+    }
+
+    @Bean
     JdkClientHttpRequestFactory dominioRequestFactory() {
         var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(3)).build());

@@ -688,3 +688,24 @@ ver las instrucciones de integración en `digitalfix-infra` antes del despliegue
 Los cambios se desarrollan en ramas y se integran a `main` mediante Pull Request.
 
 La rama `main` representa la versión estable utilizada para la entrega.
+# Historial de órdenes
+
+`GET /api/workorders/{id}/history` consulta Audit por HTTP con el mismo Bearer
+recibido del navegador. Exige JWT válido, scope `access_as_user` y rol **Admin o
+Auditor**. Cliente y Operador reciben 403, aunque sean propietarios. No consulta
+Workorders: permite leer eventos de órdenes eliminadas sin ampliar sus permisos.
+
+Configurar `DIGITALFIX_AUDIT_URL` (por defecto `http://audit:8083`). La respuesta es
+una lista cronológica con eventId, fecha, tipo, acción, actor, estados y referencia
+Kafka. Una orden sin eventos devuelve `[]`; la lectura es eventual.
+Audit rechazando el token conserva 401/403; respuesta inválida o fallo remoto da
+502; conexión caída o timeout da 503, sin exponer mensajes internos.
+
+Validación local: 82 pruebas pasan. Los tres fallos previos sobre edición de órdenes
+activas se reprodujeron en `main` a7308cb; se alinearon sus expectativas al servicio
+existente (gestores 200, Cliente 403). No se cambiaron permisos de edición.
+Infra #19 verifica HTTP real BFF → Audit → H2, consumo de eventos Workorders,
+Admin/Auditor 200, Cliente/Operador 403, JWT inválido 401 e indisponibilidad 503.
+No certifica Oracle ni Entra externos. Depende de Audit PR #5; integrar también
+Audit PR #4 para el tratamiento completo de errores de integridad.
+

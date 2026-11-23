@@ -28,6 +28,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/healthz").permitAll()
                 .requestMatchers("/api/catalog/spare-parts/discount-stock", "/api/catalog/spare-parts/discount-stock/**").denyAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
+                // Audit conserva el historial aunque la orden haya sido eliminada.
+                .requestMatchers(HttpMethod.GET, "/api/workorders/*/history")
+                    .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Auditor")))
                 .requestMatchers(HttpMethod.GET, "/api/catalog/services")
                     .access(allOf(hasAuthority("SCOPE_access_as_user"), hasAnyRole("Admin", "Operador", "Cliente")))
                 .requestMatchers(HttpMethod.GET, "/api/catalog/spare-parts")
